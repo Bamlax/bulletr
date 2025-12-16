@@ -9,8 +9,16 @@ class DevLog {
 // 这里管理你的开发日志数据
 final List<DevLog> appDevLogs = [
   DevLog(
-    version: "0.0.1",
-    date: "2023-12-16",
+    version: "0.1.1",
+    date: "2025-12-16",
+    changes: [
+      "修复数据无法保存的问题",
+      "修复版本号的错误显示",
+    ],
+  ),
+  DevLog(
+    version: "0.1.0",
+    date: "2025-12-16",
     changes: [
       "实现 日/周/月/年 四种核心视图",
       "支持全局长按拖拽排序与跨维度任务分发",
