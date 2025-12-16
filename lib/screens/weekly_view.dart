@@ -5,7 +5,7 @@ import '../providers/bujo_provider.dart';
 import '../models/bullet.dart';
 import '../models/collection.dart';
 import '../widgets/bujo_drawer.dart';
-import '../widgets/bujo_date_picker.dart';
+import '../widgets/bujo_date_picker.dart'; // 引入 calculateWeekNumber
 
 class WeeklyView extends StatefulWidget {
   final VoidCallback onJumpToDay;
@@ -32,15 +32,20 @@ class _WeeklyViewState extends State<WeeklyView> {
 
   @override
   Widget build(BuildContext context) {
-    final year = _displayedWeekStart.year;
-    final weekNum = calculateWeekNumber(_displayedWeekStart);
     final endOfWeek = _displayedWeekStart.add(const Duration(days: 6));
+    
+    // 【核心修复】年份跟随周日 (解决 2024年底显示为 "2024年 第1周" 的错误)
+    final year = endOfWeek.year; 
+    // 使用全局统一的周数计算
+    final weekNum = calculateWeekNumber(_displayedWeekStart);
+    
     final rangeStr = "${DateFormat('MM.dd').format(_displayedWeekStart)} - ${DateFormat('MM.dd').format(endOfWeek)}";
 
     return Scaffold(
       drawer: const BujoDrawer(),
       appBar: AppBar(
         title: Column(children: [
+          // 标题现在会显示：2025年 第1周
           Text("$year年 第$weekNum周", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           Text(rangeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
         ]),
@@ -94,7 +99,6 @@ class _WeeklyViewState extends State<WeeklyView> {
         return Consumer<BujoProvider>(
           builder: (context, provider, _) {
             final weeklyBullets = provider.getBulletsByScope(weekStart, BulletScope.week);
-            // 保证有足够的空间接收拖拽
             if (weeklyBullets.isEmpty && !isHovering) return Container(height: 20, width: double.infinity, color: Colors.transparent);
 
             return Container(
@@ -115,6 +119,23 @@ class _WeeklyViewState extends State<WeeklyView> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildDraggablePoolStrip(Bullet bullet) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    return LongPressDraggable<Bullet>(
+      data: bullet,
+      feedback: Material(
+        elevation: 6,
+        color: Colors.transparent,
+        child: Container(
+          width: screenWidth * 0.8, 
+          child: _buildStripContent(bullet, isDragging: true),
+        ),
+      ),
+      childWhenDragging: Opacity(opacity: 0.3, child: _buildStripContent(bullet)),
+      child: _buildStripContent(bullet),
     );
   }
 
@@ -170,34 +191,15 @@ class _WeeklyViewState extends State<WeeklyView> {
     );
   }
 
-  // --- 拖拽样式修复：全宽长条 ---
   Widget _buildDraggableStrip(Bullet bullet) {
+    final screenWidth = MediaQuery.of(context).size.width;
     return LongPressDraggable<Bullet>(
       data: bullet,
       feedback: Material(
         color: Colors.transparent,
         elevation: 4,
         child: Container(
-          width: MediaQuery.of(context).size.width - 80, // 屏幕宽度减去左侧日期宽
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
-          child: _buildStripContent(bullet, isDragging: true),
-        ),
-      ),
-      childWhenDragging: Opacity(opacity: 0.3, child: _buildStripContent(bullet)),
-      child: _buildStripContent(bullet),
-    );
-  }
-
-  // 顶部池子也用类似逻辑
-  Widget _buildDraggablePoolStrip(Bullet bullet) {
-    return LongPressDraggable<Bullet>(
-      data: bullet,
-      feedback: Material(
-        color: Colors.transparent,
-        elevation: 4,
-        child: Container(
-          width: MediaQuery.of(context).size.width - 32,
+          width: screenWidth - 80, 
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
           child: _buildStripContent(bullet, isDragging: true),
@@ -209,7 +211,6 @@ class _WeeklyViewState extends State<WeeklyView> {
   }
 
   Widget _buildStripContent(Bullet bullet, {bool isDragging = false}) {
-    // 只有非拖拽状态才响应点击
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -217,6 +218,7 @@ class _WeeklyViewState extends State<WeeklyView> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 2),
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          width: double.infinity,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -242,7 +244,6 @@ class _WeeklyViewState extends State<WeeklyView> {
     return Icons.circle;
   }
 
-  // --- 编辑弹窗：修复日期显示 ---
   void _showEditDialog(BuildContext context, Bullet bullet) {
     final controller = TextEditingController(text: bullet.content);
     final provider = Provider.of<BujoProvider>(context, listen: false);
@@ -256,14 +257,12 @@ class _WeeklyViewState extends State<WeeklyView> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setState) {
-          String collectionName = selectedCollectionId != null 
-              ? provider.collections.firstWhere((e) => e.id == selectedCollectionId, orElse: () => Collection(id:'', name:'未知')).name 
-              : "集子";
+          String collectionName = selectedCollectionId != null ? provider.collections.firstWhere((e) => e.id == selectedCollectionId, orElse: () => Collection(id:'', name:'未知')).name : "集子";
           
-          // 【核心修复】正确的日期/周数显示
           String dateStr = "日期";
           if (selectedDate != null) {
             if (selectedScope == BulletScope.day) dateStr = DateFormat('MM-dd').format(selectedDate!);
+            // 【修正】使用 calculateWeekNumber
             else if (selectedScope == BulletScope.week) dateStr = "第${calculateWeekNumber(selectedDate!)}周";
             else if (selectedScope == BulletScope.month) dateStr = "${selectedDate!.month}月";
             else if (selectedScope == BulletScope.year) dateStr = "${selectedDate!.year}年";

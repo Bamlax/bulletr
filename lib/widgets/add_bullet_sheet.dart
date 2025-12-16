@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/bullet.dart';
 import '../models/collection.dart';
 import '../providers/bujo_provider.dart';
-import 'bujo_date_picker.dart'; // 引入刚才写的日期选择器
+import 'bujo_date_picker.dart';
 
 class AddBulletSheet extends StatefulWidget {
   final DateTime initialDate;
@@ -18,6 +18,7 @@ class AddBulletSheet extends StatefulWidget {
 
 class _AddBulletSheetState extends State<AddBulletSheet> {
   late TextEditingController _controller;
+  
   DateTime? _selectedDate; 
   late BulletScope _selectedScope;
   String _selectedType = 'task';
@@ -51,7 +52,10 @@ class _AddBulletSheetState extends State<AddBulletSheet> {
                 child: TextField(
                   controller: _controller,
                   autofocus: true,
-                  decoration: const InputDecoration(hintText: "要做什么...", border: InputBorder.none),
+                  decoration: const InputDecoration(
+                    hintText: "要做什么...",
+                    border: InputBorder.none,
+                  ),
                 ),
               ),
               IconButton(
@@ -61,20 +65,29 @@ class _AddBulletSheetState extends State<AddBulletSheet> {
             ],
           ),
           const Divider(),
+          
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
                 _buildTypeSelector(),
+                
                 const SizedBox(width: 10),
+                
+                // 日期选择器
                 _buildStyledChip(
                   icon: Icons.calendar_today,
                   label: _formatDateLabel(),
                   isActive: true,
                   onTap: _pickDate,
                 ),
+
                 const SizedBox(width: 10),
+
+                // 集子选择器
                 _buildCollectionSelector(),
+                
+                // 【已移除】收集箱按钮
               ],
             ),
           ),
@@ -84,7 +97,6 @@ class _AddBulletSheetState extends State<AddBulletSheet> {
     );
   }
 
-  // 调用新的日期选择器
   void _pickDate() async {
     final result = await showBujoDatePicker(
       context, 
@@ -99,37 +111,19 @@ class _AddBulletSheetState extends State<AddBulletSheet> {
     }
   }
 
-  Widget _buildTypeSelector() {
-    IconData icon;
-    switch (_selectedType) {
-      case 'event': icon = Icons.radio_button_unchecked; break;
-      case 'note': icon = Icons.remove; break;
-      default: icon = Icons.fiber_manual_record;
-    }
-    return PopupMenuButton<String>(
-      initialValue: _selectedType,
-      tooltip: "选择类型",
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: _buildStyledChip(
-        icon: icon,
-        label: _getTypeLabel(_selectedType),
-        isActive: true,
-        onTap: null, 
-      ),
-      onSelected: (val) => setState(() => _selectedType = val),
-      itemBuilder: (context) => [
-        const PopupMenuItem(value: 'task', child: Row(children: [Icon(Icons.fiber_manual_record, size: 16), SizedBox(width: 8), Text("任务")])),
-        const PopupMenuItem(value: 'event', child: Row(children: [Icon(Icons.radio_button_unchecked, size: 16), SizedBox(width: 8), Text("事件")])),
-        const PopupMenuItem(value: 'note', child: Row(children: [Icon(Icons.remove, size: 16), SizedBox(width: 8), Text("笔记")])),
-      ],
-    );
+  String _formatDateLabel() {
+    if (_selectedDate == null) return "日期";
+    
+    if (_selectedScope == BulletScope.day) return DateFormat('MM-dd').format(_selectedDate!);
+    if (_selectedScope == BulletScope.week) return "第${calculateWeekNumber(_selectedDate!)}周";
+    if (_selectedScope == BulletScope.month) return "${_selectedDate!.month}月";
+    return "${_selectedDate!.year}年";
   }
 
   Widget _buildCollectionSelector() {
     final collections = Provider.of<BujoProvider>(context, listen: false).collections;
     final currentName = _selectedCollectionId == null 
-        ? "集子" // 默认文字
+        ? "集子" 
         : collections.firstWhere((c) => c.id == _selectedCollectionId, orElse: () => Collection(id: '', name: '未知')).name;
 
     return PopupMenuButton<String?>(
@@ -147,7 +141,7 @@ class _AddBulletSheetState extends State<AddBulletSheet> {
       onSelected: (val) {
         setState(() {
           if (_selectedCollectionId == val) {
-            _selectedCollectionId = null; // 再次点击取消
+            _selectedCollectionId = null;
           } else {
             _selectedCollectionId = val;
           }
@@ -163,6 +157,30 @@ class _AddBulletSheetState extends State<AddBulletSheet> {
           )),
         ];
       },
+    );
+  }
+
+  Widget _buildTypeSelector() {
+    IconData icon;
+    switch (_selectedType) {
+      case 'event': icon = Icons.radio_button_unchecked; break;
+      case 'note': icon = Icons.remove; break;
+      default: icon = Icons.fiber_manual_record;
+    }
+    return PopupMenuButton<String>(
+      initialValue: _selectedType,
+      child: _buildStyledChip(
+        icon: icon,
+        label: _getTypeLabel(_selectedType),
+        isActive: true,
+        onTap: null, 
+      ),
+      onSelected: (val) => setState(() => _selectedType = val),
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'task', child: Row(children: [Icon(Icons.fiber_manual_record, size: 16), SizedBox(width: 8), Text("任务")])),
+        const PopupMenuItem(value: 'event', child: Row(children: [Icon(Icons.radio_button_unchecked, size: 16), SizedBox(width: 8), Text("事件")])),
+        const PopupMenuItem(value: 'note', child: Row(children: [Icon(Icons.remove, size: 16), SizedBox(width: 8), Text("笔记")])),
+      ],
     );
   }
 
@@ -205,14 +223,6 @@ class _AddBulletSheetState extends State<AddBulletSheet> {
   }
 
   String _getTypeLabel(String type) => type == 'task' ? '任务' : (type == 'event' ? '事件' : '笔记');
-
-  String _formatDateLabel() {
-    if (_selectedDate == null) return "日期";
-    if (_selectedScope == BulletScope.day) return DateFormat('MM-dd').format(_selectedDate!);
-    if (_selectedScope == BulletScope.week) return "第${DateFormat('w').format(_selectedDate!)}周";
-    if (_selectedScope == BulletScope.month) return "${_selectedDate!.month}月";
-    return "${_selectedDate!.year}年";
-  }
 
   void _submit() {
     if (_controller.text.isNotEmpty) {

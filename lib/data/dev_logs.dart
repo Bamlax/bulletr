@@ -8,6 +8,14 @@ class DevLog {
 
 // 这里管理你的开发日志数据
 final List<DevLog> appDevLogs = [
+    DevLog(
+    version: "0.1.2",
+    date: "2025-12-16",
+    changes: [
+      "修复年交接周数的错误显示",
+      "修复新增任务界面周数的错误显示(w)",
+    ],
+  ),
   DevLog(
     version: "0.1.1",
     date: "2025-12-16",
