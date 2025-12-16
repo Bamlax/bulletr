@@ -25,6 +25,8 @@ dependencies:
   flutter_slidable: ^3.1.0
 
   url_launcher: ^6.2.1
+
+  shared_preferences: ^2.2.2
   
   # 注意：我暂时移除了 isar 和 flutter_riverpod
   # 因为我们第一阶段用 Provider + 内存存储，避免库冲突和代码混淆。

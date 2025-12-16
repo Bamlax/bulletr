@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // 【引入】
+import 'dart:convert';
 import '../models/bullet.dart';
 import '../models/collection.dart';
 
 class BujoProvider with ChangeNotifier {
-  final List<Bullet> _bullets = [];
-  final List<Collection> _collections = []; 
+  List<Bullet> _bullets = [];
+  List<Collection> _collections = []; 
   
   DateTime _focusDate = DateTime(
     DateTime.now().year, 
@@ -17,12 +19,48 @@ class BujoProvider with ChangeNotifier {
   List<Collection> get collections => _collections;
   DateTime get focusDate => _focusDate;
 
+  // --- 持久化逻辑 ---
+
+  // 加载数据 (在 main.dart 中调用)
+  Future<void> loadData() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 1. 加载集子
+    final String? collectionsJson = prefs.getString('collections');
+    if (collectionsJson != null) {
+      final List<dynamic> decoded = json.decode(collectionsJson);
+      _collections = decoded.map((item) => Collection.fromMap(item)).toList();
+    }
+
+    // 2. 加载任务
+    final String? bulletsJson = prefs.getString('bullets');
+    if (bulletsJson != null) {
+      final List<dynamic> decoded = json.decode(bulletsJson);
+      _bullets = decoded.map((item) => Bullet.fromMap(item)).toList();
+    }
+    
+    notifyListeners();
+  }
+
+  // 保存数据 (内部调用)
+  Future<void> _saveData() async {
+    final prefs = await SharedPreferences.getInstance();
+    
+    // 保存集子
+    final String collectionsJson = json.encode(_collections.map((c) => c.toMap()).toList());
+    await prefs.setString('collections', collectionsJson);
+
+    // 保存任务
+    final String bulletsJson = json.encode(_bullets.map((b) => b.toMap()).toList());
+    await prefs.setString('bullets', bulletsJson);
+  }
+
+  // --- 业务逻辑 (所有修改操作最后都要调用 _saveData) ---
+
   void setFocusDate(DateTime date) {
     _focusDate = DateTime(date.year, date.month, date.day);
     notifyListeners();
   }
-
-  // --- 查询逻辑 ---
 
   List<Bullet> getBulletsByScope(DateTime date, BulletScope scope) {
     DateTime normalizedDate = DateTime(date.year, date.month, date.day);
@@ -52,10 +90,9 @@ class BujoProvider with ChangeNotifier {
     return _bullets.where((b) => b.collectionId == collectionId).toList();
   }
 
-  // --- 增删改逻辑 ---
-
   void addCollection(String name) {
     _collections.add(Collection(id: const Uuid().v4(), name: name));
+    _saveData(); // 保存
     notifyListeners();
   }
 
@@ -63,6 +100,7 @@ class BujoProvider with ChangeNotifier {
     final index = _collections.indexWhere((c) => c.id == id);
     if (index != -1) {
       _collections[index].name = newName;
+      _saveData(); // 保存
       notifyListeners();
     }
   }
@@ -74,6 +112,7 @@ class BujoProvider with ChangeNotifier {
         b.collectionId = null;
       }
     }
+    _saveData(); // 保存
     notifyListeners();
   }
 
@@ -101,10 +140,10 @@ class BujoProvider with ChangeNotifier {
       collectionId: collectionId,
     );
     _bullets.add(newBullet);
+    _saveData(); // 保存
     notifyListeners();
   }
 
-  // 【核心修改】全量更新方法 (用于编辑框)
   void updateBulletFull(String id, {
     required String content,
     required String type,
@@ -116,7 +155,6 @@ class BujoProvider with ChangeNotifier {
     if (index != -1) {
       var b = _bullets[index];
       
-      // 处理日期归一化
       DateTime? normalizedDate;
       if (date != null) {
         normalizedDate = DateTime(date.year, date.month, date.day);
@@ -125,14 +163,19 @@ class BujoProvider with ChangeNotifier {
         if (scope == BulletScope.year) normalizedDate = DateTime(date.year, 1, 1);
       }
 
-      // 替换对象 (或者直接修改属性)
-      // 这里直接修改属性，因为是内存对象引用
-      b.content = content;
-      b.type = type;
-      b.date = normalizedDate;
-      b.scope = scope;
-      b.collectionId = collectionId;
+      // 直接替换对象以触发更新，或者需要创建一个新的对象替换旧的
+      // 这里为了简单，我们替换整个对象
+      _bullets[index] = Bullet(
+        id: b.id,
+        content: content,
+        type: type,
+        date: normalizedDate,
+        scope: scope,
+        collectionId: collectionId,
+        isCompleted: b.isCompleted
+      );
       
+      _saveData(); // 保存
       notifyListeners();
     }
   }
@@ -156,6 +199,7 @@ class BujoProvider with ChangeNotifier {
         collectionId: bullet.collectionId, 
       );
       _bullets.add(updatedBullet);
+      _saveData(); // 保存
       notifyListeners();
     }
   }
@@ -175,6 +219,7 @@ class BujoProvider with ChangeNotifier {
     );
     
     _bullets.addAll(currentScopeBullets);
+    _saveData(); // 保存
     notifyListeners();
   }
   
@@ -194,21 +239,36 @@ class BujoProvider with ChangeNotifier {
        _bullets.removeWhere((b) => b.collectionId == collectionId);
     }
     _bullets.addAll(list);
+    _saveData(); // 保存
     notifyListeners();
   }
 
   void toggleStatus(String id) {
     final index = _bullets.indexWhere((b) => b.id == id);
     if (index != -1) {
-      _bullets[index].isCompleted = !_bullets[index].isCompleted;
+      // 必须创建新对象替换旧对象，或者确保 _saveData 能序列化修改后的对象
+      // 这里因为 _bullets 存的是引用，直接改属性也是可以的，但为了稳妥我们更新列表
+      _bullets[index] = Bullet(
+        id: _bullets[index].id,
+        content: _bullets[index].content,
+        date: _bullets[index].date,
+        type: _bullets[index].type,
+        scope: _bullets[index].scope,
+        collectionId: _bullets[index].collectionId,
+        isCompleted: !_bullets[index].isCompleted, // 切换
+      );
+      _saveData(); // 保存
       notifyListeners();
     }
   }
 
   void deleteBullet(String id) {
     _bullets.removeWhere((b) => b.id == id);
+    _saveData(); // 保存
     notifyListeners();
   }
+
+  // --- 辅助 ---
 
   bool isSameDay(DateTime d1, DateTime d2) {
     return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;

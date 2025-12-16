@@ -18,16 +18,17 @@ class BujoApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => BujoProvider()),
+        // 【修改】创建 Provider 时立即调用 loadData
+        ChangeNotifierProvider(create: (_) => BujoProvider()..loadData()),
       ],
       child: MaterialApp(
         title: 'bulletr',
-        // 【修改1】去掉右上角的 Debug 标签
-        debugShowCheckedModeBanner: false, 
+        debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,
-          // 【修改2】主题色改为淡蓝色
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightBlue),
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          // 统一使用更优雅的字体
+          fontFamily: 'Roboto', 
         ),
         home: const HomeScreen(),
       ),
