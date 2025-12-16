@@ -36,5 +36,15 @@ dev_dependencies:
   # 代码规范检查
   flutter_lints: ^3.0.0
 
+  flutter_launcher_icons: ^0.13.1
+
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: "launcher_icon" # 安卓图标的文件名
+  ios: true                # 如果以后做iOS，这也顺便生成了
+  image_path: "assets/icon/icon.png" # 你的图标路径
+  min_sdk_android: 21      # 最小兼容版本
+  # 如果你想让图标在安卓上自动适应圆形/圆角（自适应图标），可以去掉下面这行的注释并设置背景色
+  # adaptive_icon_background: "#FFFFFF"
