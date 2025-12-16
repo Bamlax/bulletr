@@ -52,7 +52,6 @@ class CollectionView extends StatelessWidget {
             return Center(child: Text("没有内容", style: TextStyle(color: Colors.grey[300])));
           }
 
-          // 【核心修改】互斥侧滑
           return SlidableAutoCloseBehavior(
             child: ReorderableListView.builder(
               padding: const EdgeInsets.only(top: 10, bottom: 80),
@@ -68,7 +67,7 @@ class CollectionView extends StatelessWidget {
                   index: index,
                   child: Slidable(
                     key: ValueKey(b.id),
-                    groupTag: 'collection_list', // 互斥Tag
+                    groupTag: 'collection_list', 
                     endActionPane: ActionPane(
                       motion: const ScrollMotion(),
                       children: [
@@ -77,14 +76,12 @@ class CollectionView extends StatelessWidget {
                           backgroundColor: Colors.blue,
                           foregroundColor: Colors.white,
                           icon: Icons.calendar_today,
-                          // 无 label
                         ),
                         SlidableAction(
                           onPressed: (ctx) => provider.deleteBullet(b.id),
                           backgroundColor: Colors.red,
                           foregroundColor: Colors.white,
                           icon: Icons.delete,
-                          // 无 label
                         ),
                       ],
                     ),
@@ -106,8 +103,11 @@ class CollectionView extends StatelessWidget {
       initialScope: b.scope
     );
     if (result != null) {
-       // 更新日期 (如果选了清除，result.date 为 null)
-       provider.updateBulletFull(b.id, content: b.content, type: b.type, date: result.date, scope: result.scope, collectionId: b.collectionId);
+       if (result.date == null) {
+         provider.updateBulletFull(b.id, content: b.content, type: b.type, date: null, scope: BulletScope.none, collectionId: b.collectionId);
+       } else {
+         provider.moveBullet(b, result.date!, result.scope);
+       }
     }
   }
 
@@ -157,14 +157,14 @@ class CollectionView extends StatelessWidget {
   IconData _getIcon(Bullet b) {
     if (b.type == 'task') {
       if (b.isCompleted) return Icons.close;
-      return Icons.circle; // 实心圆
+      return Icons.circle;
     }
     if (b.type == 'event') return Icons.radio_button_unchecked;
     if (b.type == 'note') return Icons.remove;
     return Icons.circle;
   }
 
-  // --- 增强版编辑框 (与 DailyView 保持一致) ---
+  // 【核心修复】全功能编辑弹窗
   void _showEditDialog(BuildContext context, Bullet bullet) {
     final controller = TextEditingController(text: bullet.content);
     final provider = Provider.of<BujoProvider>(context, listen: false);
@@ -183,7 +183,13 @@ class CollectionView extends StatelessWidget {
              final c = provider.collections.firstWhere((e) => e.id == selectedCollectionId, orElse: () => Collection(id:'', name:'未知'));
              collectionName = c.name;
           }
-          String dateStr = selectedDate != null ? DateFormat('MM-dd').format(selectedDate!) : "日期";
+          String dateStr = "日期";
+          if (selectedDate != null) {
+            if (selectedScope == BulletScope.day) dateStr = DateFormat('MM-dd').format(selectedDate!);
+            else if (selectedScope == BulletScope.week) dateStr = "第${calculateWeekNumber(selectedDate!)}周";
+            else if (selectedScope == BulletScope.month) dateStr = "${selectedDate!.month}月";
+            else if (selectedScope == BulletScope.year) dateStr = "${selectedDate!.year}年";
+          }
 
           return AlertDialog(
             title: const Text("编辑任务"),

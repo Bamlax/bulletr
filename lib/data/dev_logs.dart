@@ -14,6 +14,7 @@ final List<DevLog> appDevLogs = [
     changes: [
       "修复年交接周数的错误显示",
       "修复新增任务界面周数的错误显示(w)",
+      "修复编辑任务界面无法正确显示周月年的问题",
     ],
   ),
   DevLog(
