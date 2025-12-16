@@ -1,0 +1,40 @@
+name: bulletr
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.0.1+1
+
+environment:
+  sdk: ^3.10.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- 核心依赖 (App运行时必须的) ---
+  # 状态管理 (我们教程用的是这个)
+  provider: ^6.1.1 
+  # 日期格式化
+  intl: ^0.19.0
+  # 生成唯一ID
+  uuid: ^4.3.3
+  # 谷歌字体 (你之前加了，保留它)
+  google_fonts: ^6.3.3
+  # 图标
+  cupertino_icons: ^1.0.8
+
+  flutter_slidable: ^3.1.0
+
+  url_launcher: ^6.2.1
+  
+  # 注意：我暂时移除了 isar 和 flutter_riverpod
+  # 因为我们第一阶段用 Provider + 内存存储，避免库冲突和代码混淆。
+  # 等你熟悉了，我们再加回数据库。
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # 代码规范检查
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
