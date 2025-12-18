@@ -5,6 +5,8 @@ import '../models/bullet.dart';
 import '../models/collection.dart';
 import '../widgets/bujo_drawer.dart';
 import '../widgets/bujo_date_picker.dart';
+import '../widgets/bullet_edit_dialog.dart'; // 【新增】
+import '../widgets/bujo_search_delegate.dart'; // 【新增】
 import 'package:intl/intl.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
@@ -36,8 +38,11 @@ class _MonthlyViewState extends State<MonthlyView> {
     final year = _displayedMonth.year;
     final month = _displayedMonth.month;
     return Scaffold(
-      drawer: const BujoDrawer(),
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => Scaffold.of(context).openDrawer(),
+        ),
         title: GestureDetector(
           onLongPress: () {
             _pageController.animateToPage(_anchorIndex, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
@@ -61,7 +66,21 @@ class _MonthlyViewState extends State<MonthlyView> {
 
   Widget _buildSingleMonthPage(DateTime monthDate) {
     return SlidableAutoCloseBehavior(
-      child: Column(children: [_buildMonthlyPool(monthDate), Expanded(child: Container(color: Colors.white, child: _buildMonthList(monthDate)))]),
+      child: Column(children: [
+        _buildMonthlyPool(monthDate),
+        Expanded(
+          child: Container(
+            color: Colors.white,
+            // 【新增】下拉搜索
+            child: RefreshIndicator(
+              onRefresh: () async {
+                await showSearch(context: context, delegate: BujoSearchDelegate());
+              },
+              child: _buildMonthList(monthDate)
+            )
+          )
+        )
+      ]),
     );
   }
 
@@ -145,7 +164,7 @@ class _MonthlyViewState extends State<MonthlyView> {
     final screenWidth = MediaQuery.of(context).size.width;
     return LongPressDraggable<Bullet>(
       data: bullet,
-      feedback: Material(color: Colors.transparent, elevation: 6, child: Container(width: screenWidth - 70, padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)), child: _buildStripContent(bullet, isDragging: true))),
+      feedback: Material(color: Colors.transparent, elevation: 6, child: Container(width: screenWidth * 0.8, padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)), child: _buildStripContent(bullet, isDragging: true))),
       childWhenDragging: Opacity(opacity: 0.3, child: _buildStripContent(bullet)),
       child: Slidable(
         key: ValueKey(bullet.id),
@@ -191,20 +210,14 @@ class _MonthlyViewState extends State<MonthlyView> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: isDragging ? null : () => _showEditDialog(context, bullet),
+        // 【核心修改】调用公共编辑框
+        onTap: isDragging ? null : () => showBulletEditDialog(context, bullet),
         child: Container(
           margin: const EdgeInsets.only(bottom: 2), padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // 【核心修复】Icon 增加点击事件
             GestureDetector(
-              onTap: bullet.type == 'task' 
-                  ? () => Provider.of<BujoProvider>(context, listen: false).toggleStatus(bullet.id)
-                  : null,
-              child: Container(
-                color: Colors.transparent, 
-                padding: const EdgeInsets.only(top: 2, right: 8, bottom: 2),
-                child: Icon(_getIcon(bullet), size: 10, color: (bullet.type == 'task' && !bullet.isCompleted) ? Colors.black : Colors.grey),
-              ),
+              onTap: bullet.type == 'task' ? () => Provider.of<BujoProvider>(context, listen: false).toggleStatus(bullet.id) : null,
+              child: Container(padding: const EdgeInsets.only(top: 2, right: 8, bottom: 2), color: Colors.transparent, child: Icon(_getIcon(bullet), size: 10, color: (bullet.type == 'task' && !isCompleted && !isCancelled) ? Colors.black : Colors.grey)),
             ),
             Expanded(child: Text(bullet.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, decoration: isCancelled ? TextDecoration.lineThrough : null, color: (isCompleted || isCancelled) ? Colors.grey : Colors.black87))),
           ]),
@@ -222,69 +235,5 @@ class _MonthlyViewState extends State<MonthlyView> {
     if (b.type == 'event') return Icons.radio_button_unchecked;
     if (b.type == 'note') return Icons.remove;
     return Icons.circle;
-  }
-
-  void _showEditDialog(BuildContext context, Bullet bullet) {
-    final controller = TextEditingController(text: bullet.content);
-    final provider = Provider.of<BujoProvider>(context, listen: false);
-    String selectedType = bullet.type;
-    DateTime? selectedDate = bullet.date;
-    BulletScope selectedScope = bullet.scope;
-    String? selectedCollectionId = bullet.collectionId;
-
-    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (context, setState) {
-      String collectionName = selectedCollectionId != null ? provider.collections.firstWhere((e) => e.id == selectedCollectionId, orElse: () => Collection(id:'', name:'未知')).name : "集子";
-      String dateStr = "日期";
-      if (selectedDate != null) {
-        if (selectedScope == BulletScope.day) dateStr = DateFormat('MM-dd').format(selectedDate!);
-        else if (selectedScope == BulletScope.week) dateStr = "第${calculateWeekNumber(selectedDate!)}周";
-        else if (selectedScope == BulletScope.month) dateStr = "${selectedDate!.month}月";
-        else if (selectedScope == BulletScope.year) dateStr = "${selectedDate!.year}年";
-      }
-
-      return AlertDialog(
-        title: const Text("编辑任务"),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: controller, autofocus: true),
-          const SizedBox(height: 20),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-            _buildTypeOption('task', Icons.fiber_manual_record, selectedType, (val) => setState(() => selectedType = val)),
-            _buildTypeOption('event', Icons.radio_button_unchecked, selectedType, (val) => setState(() => selectedType = val)),
-            _buildTypeOption('note', Icons.remove, selectedType, (val) => setState(() => selectedType = val)),
-          ]),
-          const SizedBox(height: 15),
-          Row(children: [
-            Expanded(child: _buildStyledOption(icon: Icons.calendar_today, label: dateStr, onTap: () async {
-              final res = await showBujoDatePicker(context, initialDate: selectedDate ?? DateTime.now(), initialScope: selectedScope);
-              if (res != null) setState(() { selectedDate = res.date; selectedScope = res.scope; });
-            })),
-            const SizedBox(width: 10),
-            Expanded(child: _buildStyledOption(icon: Icons.folder_open, label: collectionName, isHighLighted: selectedCollectionId != null, onTap: () {
-              showModalBottomSheet(context: context, builder: (_) => ListView(shrinkWrap: true, children: [
-                ...provider.collections.map((c) => ListTile(title: Text(c.name), onTap: () { setState(() => selectedCollectionId = c.id); Navigator.pop(context); })),
-                if (selectedCollectionId != null) ListTile(title: const Text("移除集子", style: TextStyle(color: Colors.red)), onTap: () { setState(() => selectedCollectionId = null); Navigator.pop(context); })
-              ]));
-            })),
-          ])
-        ]),
-        actionsAlignment: MainAxisAlignment.spaceBetween,
-        actions: [
-          TextButton(onPressed: () { provider.deleteBullet(bullet.id); Navigator.pop(ctx); }, style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text("删除")),
-          ElevatedButton(onPressed: () {
-            if (controller.text.isNotEmpty) {
-              provider.updateBulletFull(bullet.id, content: controller.text, type: selectedType, date: selectedDate, scope: selectedScope, collectionId: selectedCollectionId);
-              Navigator.pop(ctx);
-            }
-          }, child: const Text("保存")),
-        ],
-      );
-    }));
-  }
-
-  Widget _buildStyledOption({required IconData icon, required String label, bool isHighLighted = false, required VoidCallback onTap}) {
-    return GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8), decoration: BoxDecoration(color: isHighLighted ? Colors.blue : Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, size: 16, color: isHighLighted ? Colors.white : Colors.grey), const SizedBox(width: 4), Flexible(child: Text(label, style: TextStyle(fontSize: 12, color: isHighLighted ? Colors.white : Colors.black87), overflow: TextOverflow.ellipsis))])));
-  }
-  Widget _buildTypeOption(String type, IconData icon, String current, Function(String) onTap) {
-    return GestureDetector(onTap: () => onTap(type), child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: type == current ? Colors.blue.withValues(alpha: 0.1) : Colors.transparent, borderRadius: BorderRadius.circular(4), border: Border.all(color: type == current ? Colors.blue : Colors.transparent)), child: Icon(icon, color: type == current ? Colors.blue : Colors.grey, size: 18)));
   }
 }

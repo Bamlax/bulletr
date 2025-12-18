@@ -16,7 +16,13 @@ class BujoProvider with ChangeNotifier {
   );
 
   List<Bullet> get bullets => _bullets;
-  List<Collection> get collections => _collections;
+  
+  // 【核心修改】集子按修改时间倒序排列
+  List<Collection> get collections {
+    _collections.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return _collections;
+  }
+  
   DateTime get focusDate => _focusDate;
 
   Future<void> loadData() async {
@@ -43,6 +49,16 @@ class BujoProvider with ChangeNotifier {
     await prefs.setString('collections', collectionsJson);
     final String bulletsJson = json.encode(_bullets.map((b) => b.toMap()).toList());
     await prefs.setString('bullets', bulletsJson);
+  }
+
+  // --- 辅助：更新集子时间 ---
+  void _touchCollection(String? collectionId) {
+    if (collectionId == null) return;
+    final index = _collections.indexWhere((c) => c.id == collectionId);
+    if (index != -1) {
+      _collections[index].updatedAt = DateTime.now();
+      // 不在这里 notify，因为调用者通常会 notify
+    }
   }
 
   void setFocusDate(DateTime date) {
@@ -87,6 +103,7 @@ class BujoProvider with ChangeNotifier {
     final index = _collections.indexWhere((c) => c.id == id);
     if (index != -1) {
       _collections[index].name = newName;
+      _collections[index].updatedAt = DateTime.now(); // 更新时间
       _saveData();
       notifyListeners();
     }
@@ -128,6 +145,7 @@ class BujoProvider with ChangeNotifier {
       collectionId: collectionId,
     );
     _bullets.add(newBullet);
+    _touchCollection(collectionId); // 更新集子时间
     _saveData();
     notifyListeners();
   }
@@ -142,6 +160,7 @@ class BujoProvider with ChangeNotifier {
     final index = _bullets.indexWhere((b) => b.id == id);
     if (index != -1) {
       var b = _bullets[index];
+      
       DateTime? normalizedDate;
       if (date != null) {
         normalizedDate = DateTime(date.year, date.month, date.day);
@@ -160,6 +179,7 @@ class BujoProvider with ChangeNotifier {
         status: b.status, 
       );
       
+      _touchCollection(collectionId); // 更新集子时间
       _saveData();
       notifyListeners();
     }
@@ -184,6 +204,7 @@ class BujoProvider with ChangeNotifier {
         collectionId: bullet.collectionId, 
       );
       _bullets.add(updatedBullet);
+      _touchCollection(bullet.collectionId);
       _saveData();
       notifyListeners();
     }
@@ -222,17 +243,13 @@ class BujoProvider with ChangeNotifier {
        _bullets.removeWhere((b) => b.date == null && b.collectionId == null);
     } else {
        _bullets.removeWhere((b) => b.collectionId == collectionId);
+       _touchCollection(collectionId); // 排序也算修改
     }
     _bullets.addAll(list);
     _saveData();
     notifyListeners();
   }
 
-  // 【核心修改】状态切换逻辑
-  // 点击图标：
-  // 如果是 Open -> 变 Completed
-  // 如果是 Completed -> 变 Open (回退)
-  // 如果是 Cancelled -> 变 Open (回退)
   void toggleStatus(String id) {
     final index = _bullets.indexWhere((b) => b.id == id);
     if (index != -1) {
@@ -242,7 +259,6 @@ class BujoProvider with ChangeNotifier {
       if (current == BulletStatus.open) {
         newStatus = BulletStatus.completed;
       } else {
-        // 无论是 completed 还是 cancelled，点击都重置为 open
         newStatus = BulletStatus.open;
       }
       
@@ -250,7 +266,6 @@ class BujoProvider with ChangeNotifier {
     }
   }
 
-  // 侧滑指定状态 (完成 或 废弃)
   void changeStatus(String id, BulletStatus status) {
     final index = _bullets.indexWhere((b) => b.id == id);
     if (index != -1) {
@@ -268,14 +283,19 @@ class BujoProvider with ChangeNotifier {
       collectionId: _bullets[index].collectionId,
       status: newStatus,
     );
+    _touchCollection(_bullets[index].collectionId);
     _saveData();
     notifyListeners();
   }
 
   void deleteBullet(String id) {
-    _bullets.removeWhere((b) => b.id == id);
-    _saveData();
-    notifyListeners();
+    final index = _bullets.indexWhere((b) => b.id == id);
+    if (index != -1) {
+      _touchCollection(_bullets[index].collectionId);
+      _bullets.removeAt(index);
+      _saveData();
+      notifyListeners();
+    }
   }
 
   bool isSameDay(DateTime d1, DateTime d2) {

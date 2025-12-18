@@ -8,7 +8,7 @@ import 'daily_view.dart';
 import 'weekly_view.dart';
 import 'monthly_view.dart';
 import 'yearly_view.dart';
-import '../widgets/bujo_drawer.dart'; // 引入 Drawer
+import '../widgets/bujo_drawer.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,7 +19,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  bool _isFabVisible = true; // 【新增】控制 FAB 的显示状态
 
   void _switchTab(int index) {
     setState(() {
@@ -37,33 +36,13 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     return Scaffold(
-      // 【新增】监听 Drawer 状态
-      onDrawerChanged: (isOpened) {
-        setState(() {
-          // 如果打开了侧边栏，FAB 就不可见；关闭了就可见
-          _isFabVisible = !isOpened;
-        });
-      },
-      
-      // 注意：这里我们不再在 Scaffold 层面直接加 drawer，
-      // 而是通过 onDrawerChanged 配合子页面的 drawer 来控制。
-      // 但为了让 onDrawerChanged 生效，Scaffold 需要知道 drawer 的存在。
-      // 不过我们的架构是子页面 Scaffold 自带 drawer。
-      // 实际上，外层 HomeScreen 的 Scaffold 不负责显示内容，只负责底部导航。
-      // 内容在 body 里。
-      // 所以这里的 onDrawerChanged 监听的是 HomeScreen 自己的 Drawer。
-      // 但子页面也有 Scaffold。这是一个嵌套 Scaffold 结构。
-      // 为了让“侧边栏打开时隐藏FAB”生效，我们需要把 FAB 放在 HomeScreen，
-      // 而 Drawer 放在子页面会导致 HomeScreen 监听不到。
-      
-      // 【修正架构】为了完美实现需求，我们将 Drawer 统一提到 HomeScreen 来管理。
-      // 这样 HomeScreen 就能完美控制 FAB 的显隐了。
+      // 父级侧边栏：它的阴影层级最高，会覆盖 Body 和 FAB
       drawer: const BujoDrawer(),
 
       body: pages[_currentIndex],
       
-      // 【修改】根据状态决定是否显示按钮
-      floatingActionButton: _isFabVisible ? FloatingActionButton(
+      // 这里的 FAB 会被 Drawer 的阴影覆盖
+      floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         onPressed: () {
           BulletScope scope = BulletScope.day;
@@ -83,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         },
-      ) : null, // 隐藏时不渲染
+      ),
       
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/bujo_provider.dart';
 import '../screens/collection_view.dart';
-import '../screens/settings_screen.dart'; // 【引入】设置页面
+import '../screens/settings_screen.dart';
 
 class BujoDrawer extends StatelessWidget {
   const BujoDrawer({super.key});
@@ -12,12 +12,10 @@ class BujoDrawer extends StatelessWidget {
     return Drawer(
       child: Column(
         children: [
-          // 【核心修改】使用 Stack 在右上角叠加设置按钮
           Stack(
             children: [
               UserAccountsDrawerHeader(
                 decoration: const BoxDecoration(color: Colors.blue),
-                // 软件名改为 bulletr
                 accountName: const Text("bulletr", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
                 accountEmail: null,
                 currentAccountPicture: const CircleAvatar(
@@ -25,18 +23,14 @@ class BujoDrawer extends StatelessWidget {
                   child: Icon(Icons.book, color: Colors.blue),
                 ),
               ),
-              // 右上角的设置图标
               Positioned(
-                top: 8 + MediaQuery.of(context).padding.top, // 适配刘海屏
+                top: 8 + MediaQuery.of(context).padding.top,
                 right: 8,
                 child: IconButton(
                   icon: const Icon(Icons.settings, color: Colors.white),
                   onPressed: () {
-                    Navigator.pop(context); // 关侧边栏
-                    Navigator.push(
-                      context, 
-                      MaterialPageRoute(builder: (_) => const SettingsScreen())
-                    );
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
                   },
                 ),
               )
@@ -45,7 +39,8 @@ class BujoDrawer extends StatelessWidget {
           
           ListTile(
             leading: const Icon(Icons.inbox, color: Colors.blue),
-            title: const Text("收集箱 (Inbox)"),
+            // 【修改】去掉了英文
+            title: const Text("收集箱"),
             onTap: () {
               Navigator.pop(context);
               Navigator.push(
@@ -67,6 +62,7 @@ class BujoDrawer extends StatelessWidget {
           Expanded(
             child: Consumer<BujoProvider>(
               builder: (context, provider, _) {
+                // Provider 中已经做了排序
                 return ListView.builder(
                   padding: EdgeInsets.zero,
                   itemCount: provider.collections.length,
