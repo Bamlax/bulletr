@@ -8,6 +8,15 @@ class DevLog {
 
 // 这里管理你的开发日志数据
 final List<DevLog> appDevLogs = [
+      DevLog(
+    version: "0.2.0",
+    date: "2025-12-18",
+    changes: [
+      "新增长按顶栏可以返回当前日/周/月/年",
+      "新增任务左滑未完成功能",
+      "",
+    ],
+  ),
     DevLog(
     version: "0.1.2",
     date: "2025-12-16",

@@ -1,12 +1,16 @@
 import 'dart:convert';
 
+// 【新增】任务状态枚举
+enum BulletStatus { open, completed, cancelled }
+
 enum BulletScope { day, week, month, year, none }
 
 class Bullet {
   final String id;
   String content;
   DateTime? date;      
-  bool isCompleted;
+  // 【修改】替换 isCompleted 为 status
+  BulletStatus status;
   String type;        
   BulletScope scope;   
   String? collectionId; 
@@ -15,23 +19,21 @@ class Bullet {
     required this.id,
     required this.content,
     this.date, 
-    this.isCompleted = false,
+    // 默认为 open
+    this.status = BulletStatus.open,
     this.type = 'task',
     this.scope = BulletScope.day,
     this.collectionId,
   });
 
-  // --- 序列化逻辑 ---
-
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'content': content,
-      // 日期转为 ISO8601 字符串存储，如果是 null 则存 null
       'date': date?.toIso8601String(),
-      'isCompleted': isCompleted,
+      // 【修改】保存 status 的字符串名
+      'status': status.name,
       'type': type,
-      // 枚举转为字符串存储 (例如 "BulletScope.day" -> "day")
       'scope': scope.name,
       'collectionId': collectionId,
     };
@@ -41,11 +43,12 @@ class Bullet {
     return Bullet(
       id: map['id'],
       content: map['content'],
-      // 字符串转回 DateTime
       date: map['date'] != null ? DateTime.parse(map['date']) : null,
-      isCompleted: map['isCompleted'] ?? false,
+      // 【修改】读取 status，如果旧数据没有 status 字段，根据 isCompleted 兼容(如果有的话)或默认为 open
+      status: map['status'] != null 
+          ? BulletStatus.values.firstWhere((e) => e.name == map['status'])
+          : (map['isCompleted'] == true ? BulletStatus.completed : BulletStatus.open),
       type: map['type'] ?? 'task',
-      // 字符串转回 Enum
       scope: BulletScope.values.firstWhere(
         (e) => e.name == map['scope'], 
         orElse: () => BulletScope.day
@@ -53,6 +56,11 @@ class Bullet {
       collectionId: map['collectionId'],
     );
   }
+
+  // 辅助属性：是否已完成 (为了兼容某些逻辑，虽然现在有三种状态)
+  bool get isCompleted => status == BulletStatus.completed;
+  // 辅助属性：是否已取消
+  bool get isCancelled => status == BulletStatus.cancelled;
 
   String toJson() => json.encode(toMap());
   

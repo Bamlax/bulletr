@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 import '../providers/bujo_provider.dart';
 import '../models/bullet.dart';
 import '../models/collection.dart';
@@ -40,10 +41,19 @@ class _WeeklyViewState extends State<WeeklyView> {
     return Scaffold(
       drawer: const BujoDrawer(),
       appBar: AppBar(
-        title: Column(children: [
-          Text("$year年 第$weekNum周", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          Text(rangeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-        ]),
+        title: GestureDetector(
+          onLongPress: () {
+            _pageController.animateToPage(
+              _anchorIndex, 
+              duration: const Duration(milliseconds: 300), 
+              curve: Curves.easeInOut
+            );
+          },
+          child: Column(children: [
+            Text("$year年 第$weekNum周", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(rangeStr, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          ]),
+        ),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
@@ -64,13 +74,15 @@ class _WeeklyViewState extends State<WeeklyView> {
   }
 
   Widget _buildSingleWeekPage(DateTime weekStart) {
-    return Column(children: [
-      _buildWeeklyPool(weekStart),
-      Expanded(child: Container(color: Colors.white, child: ListView.builder(padding: EdgeInsets.zero, itemCount: 7, itemBuilder: (context, i) {
-        final dayDate = weekStart.add(Duration(days: i));
-        return _buildDayDropTarget(dayDate);
-      }))),
-    ]);
+    return SlidableAutoCloseBehavior(
+      child: Column(children: [
+        _buildWeeklyPool(weekStart),
+        Expanded(child: Container(color: Colors.white, child: ListView.builder(padding: EdgeInsets.zero, itemCount: 7, itemBuilder: (context, i) {
+          final dayDate = weekStart.add(Duration(days: i));
+          return _buildDayDropTarget(dayDate);
+        }))),
+      ]),
+    );
   }
 
   Widget _buildWeeklyPool(DateTime weekStart) {
@@ -98,11 +110,18 @@ class _WeeklyViewState extends State<WeeklyView> {
   }
 
   Widget _buildDraggablePoolStrip(Bullet bullet) {
+    final screenWidth = MediaQuery.of(context).size.width;
     return LongPressDraggable<Bullet>(
       data: bullet,
-      feedback: Material(color: Colors.transparent, elevation: 6, child: Container(width: MediaQuery.of(context).size.width - 32, padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)), child: _buildStripContent(bullet, isDragging: true))),
+      feedback: Material(color: Colors.transparent, elevation: 6, child: Container(width: screenWidth * 0.8, padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)), child: _buildStripContent(bullet, isDragging: true))),
       childWhenDragging: Opacity(opacity: 0.3, child: _buildStripContent(bullet)),
-      child: _buildStripContent(bullet),
+      child: Slidable(
+        key: ValueKey(bullet.id),
+        groupTag: 'weekly_pool',
+        startActionPane: _buildStartPane(bullet),
+        endActionPane: _buildEndPane(bullet),
+        child: _buildStripContent(bullet),
+      ),
     );
   }
 
@@ -136,15 +155,53 @@ class _WeeklyViewState extends State<WeeklyView> {
   }
 
   Widget _buildDraggableStrip(Bullet bullet) {
+    final screenWidth = MediaQuery.of(context).size.width;
     return LongPressDraggable<Bullet>(
       data: bullet,
-      feedback: Material(color: Colors.transparent, elevation: 4, child: Container(width: MediaQuery.of(context).size.width - 80, padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)), child: _buildStripContent(bullet, isDragging: true))),
+      feedback: Material(color: Colors.transparent, elevation: 4, child: Container(width: screenWidth - 80, padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)), child: _buildStripContent(bullet, isDragging: true))),
       childWhenDragging: Opacity(opacity: 0.3, child: _buildStripContent(bullet)),
-      child: _buildStripContent(bullet),
+      child: Slidable(
+        key: ValueKey(bullet.id),
+        groupTag: 'weekly_list',
+        startActionPane: _buildStartPane(bullet),
+        endActionPane: _buildEndPane(bullet),
+        child: _buildStripContent(bullet),
+      ),
     );
   }
 
+  ActionPane _buildStartPane(Bullet b) {
+    return ActionPane(
+      motion: const ScrollMotion(),
+      children: [
+        SlidableAction(onPressed: (ctx) => Provider.of<BujoProvider>(ctx, listen: false).changeStatus(b.id, BulletStatus.completed), backgroundColor: Colors.green, foregroundColor: Colors.white, icon: Icons.check),
+        SlidableAction(onPressed: (ctx) => Provider.of<BujoProvider>(ctx, listen: false).changeStatus(b.id, BulletStatus.cancelled), backgroundColor: Colors.grey, foregroundColor: Colors.white, icon: Icons.close),
+      ],
+    );
+  }
+
+  ActionPane _buildEndPane(Bullet b) {
+    return ActionPane(
+      motion: const ScrollMotion(),
+      children: [
+        SlidableAction(onPressed: (ctx) => _pickNewDate(ctx, Provider.of<BujoProvider>(ctx, listen: false), b), backgroundColor: Colors.blue, foregroundColor: Colors.white, icon: Icons.calendar_today),
+        SlidableAction(onPressed: (ctx) => Provider.of<BujoProvider>(ctx, listen: false).deleteBullet(b.id), backgroundColor: Colors.red, foregroundColor: Colors.white, icon: Icons.delete),
+      ],
+    );
+  }
+
+  Future<void> _pickNewDate(BuildContext context, BujoProvider provider, Bullet b) async {
+    final result = await showBujoDatePicker(context, initialDate: b.date ?? DateTime.now(), initialScope: b.scope);
+    if (result != null) {
+      if (result.date == null) provider.updateBulletFull(b.id, content: b.content, type: b.type, date: null, scope: BulletScope.none, collectionId: null);
+      else provider.moveBullet(b, result.date!, result.scope);
+    }
+  }
+
   Widget _buildStripContent(Bullet bullet, {bool isDragging = false}) {
+    bool isCancelled = bullet.status == BulletStatus.cancelled;
+    bool isCompleted = bullet.status == BulletStatus.completed;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -152,9 +209,18 @@ class _WeeklyViewState extends State<WeeklyView> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 2), padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Padding(padding: const EdgeInsets.only(top: 2), child: Icon(_getIcon(bullet), size: 14, color: (bullet.type == 'task' && !bullet.isCompleted) ? Colors.black : Colors.grey)),
-            const SizedBox(width: 8),
-            Expanded(child: Text(bullet.content, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, height: 1.2, decoration: bullet.isCompleted ? TextDecoration.lineThrough : null, color: bullet.isCompleted ? Colors.grey : Colors.black87))),
+            // 【核心修复】Icon 增加点击事件
+            GestureDetector(
+              onTap: bullet.type == 'task' 
+                  ? () => Provider.of<BujoProvider>(context, listen: false).toggleStatus(bullet.id)
+                  : null,
+              child: Container(
+                color: Colors.transparent, // 扩大点击区域
+                padding: const EdgeInsets.only(top: 2, right: 8, bottom: 2),
+                child: Icon(_getIcon(bullet), size: 14, color: (bullet.type == 'task' && !isCompleted && !isCancelled) ? Colors.black : Colors.grey),
+              ),
+            ),
+            Expanded(child: Text(bullet.content, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, height: 1.2, decoration: isCancelled ? TextDecoration.lineThrough : null, color: (isCompleted || isCancelled) ? Colors.grey : Colors.black87))),
           ]),
         ),
       ),
@@ -162,7 +228,11 @@ class _WeeklyViewState extends State<WeeklyView> {
   }
 
   IconData _getIcon(Bullet b) {
-    if (b.type == 'task') return b.isCompleted ? Icons.close : Icons.circle;
+    if (b.type == 'task') {
+      if (b.status == BulletStatus.completed) return Icons.close;
+      if (b.status == BulletStatus.cancelled) return Icons.circle;
+      return Icons.circle;
+    }
     if (b.type == 'event') return Icons.radio_button_unchecked;
     if (b.type == 'note') return Icons.remove;
     return Icons.circle;
@@ -178,8 +248,6 @@ class _WeeklyViewState extends State<WeeklyView> {
 
     showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (context, setState) {
       String collectionName = selectedCollectionId != null ? provider.collections.firstWhere((e) => e.id == selectedCollectionId, orElse: () => Collection(id:'', name:'未知')).name : "集子";
-      
-      // 【核心修复】使用正确的日期显示
       String dateStr = "日期";
       if (selectedDate != null) {
         if (selectedScope == BulletScope.day) dateStr = DateFormat('MM-dd').format(selectedDate!);

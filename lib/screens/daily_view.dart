@@ -6,7 +6,7 @@ import '../providers/bujo_provider.dart';
 import '../models/bullet.dart';
 import '../models/collection.dart';
 import '../widgets/bujo_drawer.dart';
-import '../widgets/bujo_date_picker.dart'; // 必须引入这个
+import '../widgets/bujo_date_picker.dart';
 
 class DailyView extends StatefulWidget {
   const DailyView({super.key});
@@ -38,7 +38,16 @@ class _DailyViewState extends State<DailyView> {
     return Scaffold(
       drawer: const BujoDrawer(),
       appBar: AppBar(
-        title: Text(titleString, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: GestureDetector(
+          onLongPress: () {
+            _pageController.animateToPage(
+              _anchorIndex, 
+              duration: const Duration(milliseconds: 300), 
+              curve: Curves.easeInOut
+            );
+          },
+          child: Text(titleString, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
         centerTitle: true,
         backgroundColor: Colors.white,
         scrolledUnderElevation: 0,
@@ -81,6 +90,25 @@ class _DailyViewState extends State<DailyView> {
                 child: Slidable(
                   key: ValueKey(b.id),
                   groupTag: 'daily_list',
+                  // 【核心修改】右滑菜单，不显示 label
+                  startActionPane: ActionPane(
+                    motion: const ScrollMotion(),
+                    children: [
+                      SlidableAction(
+                        onPressed: (ctx) => provider.changeStatus(b.id, BulletStatus.completed),
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        icon: Icons.check, // 完成
+                        // label: null, // 不写 label 即为无文字
+                      ),
+                      SlidableAction(
+                        onPressed: (ctx) => provider.changeStatus(b.id, BulletStatus.cancelled),
+                        backgroundColor: Colors.grey,
+                        foregroundColor: Colors.white,
+                        icon: Icons.close, // 废弃
+                      ),
+                    ],
+                  ),
                   endActionPane: ActionPane(
                     motion: const ScrollMotion(),
                     children: [
@@ -124,6 +152,9 @@ class _DailyViewState extends State<DailyView> {
   }
 
   Widget _buildListItem(BuildContext context, BujoProvider provider, Bullet b) {
+    bool isCancelled = b.status == BulletStatus.cancelled;
+    bool isCompleted = b.status == BulletStatus.completed;
+    
     return Material(
       color: Colors.transparent, 
       child: InkWell(
@@ -133,13 +164,15 @@ class _DailyViewState extends State<DailyView> {
           child: Row(
             children: [
               GestureDetector(
+                // 只有 Task 才能点击切换，但现在支持 Cancelled 状态回退，所以 Task 的任何状态都能点
                 onTap: b.type == 'task' ? () => provider.toggleStatus(b.id) : null,
                 child: Container(
                   color: Colors.transparent,
                   padding: const EdgeInsets.only(right: 12),
                   child: Icon(
                     _getIcon(b),
-                    color: (b.type == 'task' && !b.isCompleted) ? Colors.black : Colors.grey,
+                    // 如果是 Cancelled 或 Completed，显示灰色；否则（Open）显示黑色
+                    color: (b.type == 'task' && !isCompleted && !isCancelled) ? Colors.black : Colors.grey,
                     size: 14,
                   ),
                 ),
@@ -150,8 +183,9 @@ class _DailyViewState extends State<DailyView> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    decoration: b.isCompleted ? TextDecoration.lineThrough : null,
-                    color: b.isCompleted ? Colors.grey : Colors.black87,
+                    // 【核心修改】Cancelled 状态加删除线
+                    decoration: isCancelled ? TextDecoration.lineThrough : null,
+                    color: (isCompleted || isCancelled) ? Colors.grey : Colors.black87,
                     fontSize: 15,
                     height: 1.2,
                   ),
@@ -164,112 +198,74 @@ class _DailyViewState extends State<DailyView> {
     );
   }
 
-  // 【核心修复】正确的日期显示逻辑
+  IconData _getIcon(Bullet b) {
+    if (b.type == 'task') {
+      if (b.status == BulletStatus.completed) return Icons.close; // 完成显示 X
+      // 未完成/废弃 (Cancelled) 显示圆点 (配合文字删除线)
+      // 进行中 (Open) 显示圆点
+      return Icons.circle; 
+    }
+    if (b.type == 'event') return Icons.radio_button_unchecked;
+    if (b.type == 'note') return Icons.remove;
+    return Icons.circle;
+  }
+
   void _showEditDialog(BuildContext context, Bullet bullet) {
     final controller = TextEditingController(text: bullet.content);
     final provider = Provider.of<BujoProvider>(context, listen: false);
-    
     String selectedType = bullet.type;
     DateTime? selectedDate = bullet.date;
     BulletScope selectedScope = bullet.scope;
     String? selectedCollectionId = bullet.collectionId;
 
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setState) {
-          String collectionName = "集子";
-          if (selectedCollectionId != null) {
-             final c = provider.collections.firstWhere((e) => e.id == selectedCollectionId, orElse: () => Collection(id:'', name:'未知'));
-             collectionName = c.name;
-          }
+    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (context, setState) {
+      String collectionName = selectedCollectionId != null ? provider.collections.firstWhere((e) => e.id == selectedCollectionId, orElse: () => Collection(id:'', name:'未知')).name : "集子";
+      
+      String dateStr = "日期";
+      if (selectedDate != null) {
+        if (selectedScope == BulletScope.day) dateStr = DateFormat('MM-dd').format(selectedDate!);
+        else if (selectedScope == BulletScope.week) dateStr = "第${calculateWeekNumber(selectedDate!)}周";
+        else if (selectedScope == BulletScope.month) dateStr = "${selectedDate!.month}月";
+        else if (selectedScope == BulletScope.year) dateStr = "${selectedDate!.year}年";
+      }
 
-          // --- 修复部分：根据 scope 显示正确的日期格式 ---
-          String dateStr = "日期";
-          if (selectedDate != null) {
-            if (selectedScope == BulletScope.day) {
-              dateStr = DateFormat('MM-dd').format(selectedDate!);
-            } else if (selectedScope == BulletScope.week) {
-              dateStr = "第${calculateWeekNumber(selectedDate!)}周"; // 使用工具函数
-            } else if (selectedScope == BulletScope.month) {
-              dateStr = "${selectedDate!.month}月";
-            } else if (selectedScope == BulletScope.year) {
-              dateStr = "${selectedDate!.year}年";
+      return AlertDialog(
+        title: const Text("编辑任务"),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: controller, autofocus: true),
+          const SizedBox(height: 20),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+            _buildTypeOption('task', Icons.fiber_manual_record, selectedType, (val) => setState(() => selectedType = val)),
+            _buildTypeOption('event', Icons.radio_button_unchecked, selectedType, (val) => setState(() => selectedType = val)),
+            _buildTypeOption('note', Icons.remove, selectedType, (val) => setState(() => selectedType = val)),
+          ]),
+          const SizedBox(height: 15),
+          Row(children: [
+            Expanded(child: _buildStyledOption(icon: Icons.calendar_today, label: dateStr, onTap: () async {
+              final res = await showBujoDatePicker(context, initialDate: selectedDate ?? DateTime.now(), initialScope: selectedScope);
+              if (res != null) setState(() { selectedDate = res.date; selectedScope = res.scope; });
+            })),
+            const SizedBox(width: 10),
+            Expanded(child: _buildStyledOption(icon: Icons.folder_open, label: collectionName, isHighLighted: selectedCollectionId != null, onTap: () {
+              showModalBottomSheet(context: context, builder: (_) => ListView(shrinkWrap: true, children: [
+                ...provider.collections.map((c) => ListTile(title: Text(c.name), onTap: () { setState(() => selectedCollectionId = c.id); Navigator.pop(context); })),
+                if (selectedCollectionId != null) ListTile(title: const Text("移除集子", style: TextStyle(color: Colors.red)), onTap: () { setState(() => selectedCollectionId = null); Navigator.pop(context); })
+              ]));
+            })),
+          ])
+        ]),
+        actionsAlignment: MainAxisAlignment.spaceBetween,
+        actions: [
+          TextButton(onPressed: () { provider.deleteBullet(bullet.id); Navigator.pop(ctx); }, style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text("删除")),
+          ElevatedButton(onPressed: () {
+            if (controller.text.isNotEmpty) {
+              provider.updateBulletFull(bullet.id, content: controller.text, type: selectedType, date: selectedDate, scope: selectedScope, collectionId: selectedCollectionId);
+              Navigator.pop(ctx);
             }
-          }
-          // ------------------------------------------
-
-          return AlertDialog(
-            title: const Text("编辑任务"),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: "内容")),
-                const SizedBox(height: 20),
-                Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                  _buildTypeOption('task', Icons.fiber_manual_record, selectedType, (val) => setState(() => selectedType = val)),
-                  _buildTypeOption('event', Icons.radio_button_unchecked, selectedType, (val) => setState(() => selectedType = val)),
-                  _buildTypeOption('note', Icons.remove, selectedType, (val) => setState(() => selectedType = val)),
-                ]),
-                const SizedBox(height: 15),
-                Row(children: [
-                  Expanded(
-                    child: _buildStyledOption(
-                      icon: Icons.calendar_today,
-                      label: dateStr,
-                      onTap: () async {
-                        final res = await showBujoDatePicker(context, initialDate: selectedDate ?? DateTime.now(), initialScope: selectedScope);
-                        if (res != null) {
-                          setState(() {
-                            selectedDate = res.date;
-                            selectedScope = res.scope;
-                          });
-                        }
-                      }
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _buildStyledOption(
-                      icon: Icons.folder_open,
-                      label: collectionName,
-                      isHighLighted: selectedCollectionId != null,
-                      onTap: () {
-                        showModalBottomSheet(context: context, builder: (_) => ListView(
-                          shrinkWrap: true,
-                          children: [
-                            ...provider.collections.map((c) => ListTile(
-                              title: Text(c.name),
-                              onTap: () {
-                                setState(() => selectedCollectionId = c.id);
-                                Navigator.pop(context);
-                              },
-                            )),
-                            if (selectedCollectionId != null)
-                              ListTile(title: const Text("移除集子", style: TextStyle(color: Colors.red)), onTap: () { setState(() => selectedCollectionId = null); Navigator.pop(context); })
-                          ],
-                        ));
-                      }
-                    ),
-                  ),
-                ])
-              ],
-            ),
-            actionsAlignment: MainAxisAlignment.spaceBetween,
-            actions: [
-              TextButton(onPressed: () { provider.deleteBullet(bullet.id); Navigator.pop(ctx); }, style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text("删除")),
-              ElevatedButton(onPressed: () {
-                if (controller.text.isNotEmpty) {
-                  provider.updateBulletFull(bullet.id, content: controller.text, type: selectedType, date: selectedDate, scope: selectedScope, collectionId: selectedCollectionId);
-                  Navigator.pop(ctx);
-                }
-              }, child: const Text("保存")),
-            ],
-          );
-        },
-      ),
-    );
+          }, child: const Text("保存")),
+        ],
+      );
+    }));
   }
 
   Widget _buildStyledOption({required IconData icon, required String label, bool isHighLighted = false, required VoidCallback onTap}) {
@@ -277,11 +273,5 @@ class _DailyViewState extends State<DailyView> {
   }
   Widget _buildTypeOption(String type, IconData icon, String current, Function(String) onTap) {
     return GestureDetector(onTap: () => onTap(type), child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: type == current ? Colors.blue.withValues(alpha: 0.1) : Colors.transparent, borderRadius: BorderRadius.circular(4), border: Border.all(color: type == current ? Colors.blue : Colors.transparent)), child: Icon(icon, color: type == current ? Colors.blue : Colors.grey, size: 18)));
-  }
-  IconData _getIcon(Bullet b) {
-    if (b.type == 'task') return b.isCompleted ? Icons.check_circle : Icons.circle;
-    if (b.type == 'event') return Icons.radio_button_unchecked;
-    if (b.type == 'note') return Icons.remove;
-    return Icons.circle;
   }
 }
