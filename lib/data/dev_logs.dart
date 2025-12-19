@@ -8,7 +8,15 @@ class DevLog {
 
 // 这里管理你的开发日志数据
 final List<DevLog> appDevLogs = [
-      DevLog(
+    DevLog(
+    version: "0.3.0",
+    date: "2025-12-19",
+    changes: [
+      "新增嵌套功能",
+      "修复搜索记录无法倒序显示的问题",
+    ],
+  ),
+    DevLog(
     version: "0.2.0",
     date: "2025-12-18",
     changes: [

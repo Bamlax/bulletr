@@ -17,7 +17,7 @@ class BujoProvider with ChangeNotifier {
 
   List<Bullet> get bullets => _bullets;
   
-  // 【核心修改】集子按修改时间倒序排列
+  // 集子按修改时间倒序
   List<Collection> get collections {
     _collections.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return _collections;
@@ -51,13 +51,11 @@ class BujoProvider with ChangeNotifier {
     await prefs.setString('bullets', bulletsJson);
   }
 
-  // --- 辅助：更新集子时间 ---
   void _touchCollection(String? collectionId) {
     if (collectionId == null) return;
     final index = _collections.indexWhere((c) => c.id == collectionId);
     if (index != -1) {
       _collections[index].updatedAt = DateTime.now();
-      // 不在这里 notify，因为调用者通常会 notify
     }
   }
 
@@ -103,7 +101,7 @@ class BujoProvider with ChangeNotifier {
     final index = _collections.indexWhere((c) => c.id == id);
     if (index != -1) {
       _collections[index].name = newName;
-      _collections[index].updatedAt = DateTime.now(); // 更新时间
+      _collections[index].updatedAt = DateTime.now();
       _saveData();
       notifyListeners();
     }
@@ -114,6 +112,7 @@ class BujoProvider with ChangeNotifier {
     for (var b in _bullets) {
       if (b.collectionId == id) {
         b.collectionId = null;
+        b.updatedAt = DateTime.now(); // 归属变化，更新时间
       }
     }
     _saveData();
@@ -143,9 +142,10 @@ class BujoProvider with ChangeNotifier {
       scope: scope,
       status: BulletStatus.open,
       collectionId: collectionId,
+      updatedAt: DateTime.now(), // 初始时间
     );
     _bullets.add(newBullet);
-    _touchCollection(collectionId); // 更新集子时间
+    _touchCollection(collectionId);
     _saveData();
     notifyListeners();
   }
@@ -177,9 +177,10 @@ class BujoProvider with ChangeNotifier {
         scope: scope,
         collectionId: collectionId,
         status: b.status, 
+        updatedAt: DateTime.now(), // 【核心修改】更新时间
       );
       
-      _touchCollection(collectionId); // 更新集子时间
+      _touchCollection(collectionId);
       _saveData();
       notifyListeners();
     }
@@ -202,6 +203,7 @@ class BujoProvider with ChangeNotifier {
         date: targetDate,
         scope: newScope,
         collectionId: bullet.collectionId, 
+        updatedAt: DateTime.now(), // 【核心修改】更新时间
       );
       _bullets.add(updatedBullet);
       _touchCollection(bullet.collectionId);
@@ -210,6 +212,8 @@ class BujoProvider with ChangeNotifier {
     }
   }
   
+  // 重新排序不算作“修改内容”，所以通常不更新 updatedAt，除非你希望排序也顶上去
+  // 这里暂时不更新 updatedAt，保持内容修改才更新
   void reorderDailyBullets(DateTime date, int oldIndex, int newIndex) {
     List<Bullet> currentScopeBullets = getBulletsByScope(date, BulletScope.day);
     if (oldIndex < newIndex) newIndex -= 1;
@@ -243,7 +247,7 @@ class BujoProvider with ChangeNotifier {
        _bullets.removeWhere((b) => b.date == null && b.collectionId == null);
     } else {
        _bullets.removeWhere((b) => b.collectionId == collectionId);
-       _touchCollection(collectionId); // 排序也算修改
+       _touchCollection(collectionId); 
     }
     _bullets.addAll(list);
     _saveData();
@@ -282,6 +286,7 @@ class BujoProvider with ChangeNotifier {
       scope: _bullets[index].scope,
       collectionId: _bullets[index].collectionId,
       status: newStatus,
+      updatedAt: DateTime.now(), // 【核心修改】状态改变也算修改
     );
     _touchCollection(_bullets[index].collectionId);
     _saveData();

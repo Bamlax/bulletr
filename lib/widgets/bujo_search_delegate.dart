@@ -3,15 +3,14 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/bujo_provider.dart';
 import '../models/bullet.dart';
-import '../models/collection.dart'; // 引入 Collection 以获取集子名称
+import '../models/collection.dart';
 import 'bullet_edit_dialog.dart';
-import 'bujo_date_picker.dart'; // 【新增】引入，为了使用 calculateWeekNumber
+import 'bujo_date_picker.dart';
 
 class BujoSearchDelegate extends SearchDelegate {
   @override
   String get searchFieldLabel => "搜索任务...";
 
-  // 修改搜索框的样式（可选，为了统一风格）
   @override
   ThemeData appBarTheme(BuildContext context) {
     final theme = Theme.of(context);
@@ -60,10 +59,13 @@ class BujoSearchDelegate extends SearchDelegate {
   Widget _buildSearchResults(BuildContext context) {
     final provider = Provider.of<BujoProvider>(context, listen: false);
     
-    // 简单的包含搜索 (忽略大小写)
+    // 1. 过滤
     final results = provider.bullets.where((b) {
       return b.content.toLowerCase().contains(query.toLowerCase());
     }).toList();
+
+    // 2. 【核心修改】按修改时间倒序排列 (最新的在前)
+    results.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
     if (results.isEmpty) {
       return const Center(child: Text("没有找到相关记录", style: TextStyle(color: Colors.grey)));
@@ -82,14 +84,11 @@ class BujoSearchDelegate extends SearchDelegate {
               color: b.status != BulletStatus.open ? Colors.grey : Colors.black,
             ),
           ),
-          // 【修改】显示更详细的信息
           subtitle: Text(
             _getMetaInfo(b, provider), 
             style: const TextStyle(fontSize: 12, color: Colors.grey)
           ),
           onTap: () {
-            // 点击弹出编辑框，并关闭搜索（或者保持搜索？通常关闭体验较好，或者直接弹窗）
-            // 这里直接弹窗，编辑完后搜索结果会实时更新（因为是 Provider）
             showBulletEditDialog(context, b);
           },
         );
@@ -97,9 +96,7 @@ class BujoSearchDelegate extends SearchDelegate {
     );
   }
 
-  // 【核心修改】根据 Scope 生成显示的日期字符串
   String _getMetaInfo(Bullet b, BujoProvider provider) {
-    // 1. 类型转中文
     String typeStr;
     switch (b.type) {
       case 'event': typeStr = '事件'; break;
@@ -107,7 +104,6 @@ class BujoSearchDelegate extends SearchDelegate {
       default: typeStr = '任务'; break;
     }
 
-    // 2. 日期/范围格式化
     String scopeStr = "收集箱";
     if (b.date != null) {
       switch (b.scope) {
@@ -115,7 +111,6 @@ class BujoSearchDelegate extends SearchDelegate {
           scopeStr = DateFormat('MM-dd').format(b.date!);
           break;
         case BulletScope.week:
-          // 使用 bujo_date_picker.dart 中的算法
           scopeStr = "${b.date!.year}年 第${calculateWeekNumber(b.date!)}周";
           break;
         case BulletScope.month:
@@ -126,12 +121,11 @@ class BujoSearchDelegate extends SearchDelegate {
           break;
         case BulletScope.none:
         default:
-          scopeStr = "收集箱"; // 有日期但 scope 为 none 的情况
+          scopeStr = "收集箱"; 
           break;
       }
     }
 
-    // 3. 如果属于某个集子，也显示出来
     String collectionStr = "";
     if (b.collectionId != null) {
       final c = provider.collections.firstWhere(
