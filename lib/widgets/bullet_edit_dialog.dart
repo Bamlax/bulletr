@@ -6,7 +6,6 @@ import '../models/collection.dart';
 import '../providers/bujo_provider.dart';
 import 'bujo_date_picker.dart';
 
-// 静态方法调用
 void showBulletEditDialog(BuildContext context, Bullet bullet) {
   final controller = TextEditingController(text: bullet.content);
   final provider = Provider.of<BujoProvider>(context, listen: false);
@@ -34,12 +33,15 @@ void showBulletEditDialog(BuildContext context, Bullet bullet) {
           else if (selectedScope == BulletScope.year) dateStr = "${selectedDate!.year}年";
         }
 
+        // 【核心修改】检查是否有集子
+        bool hasCollections = provider.collections.isNotEmpty;
+
         return AlertDialog(
           title: const Text("编辑任务"),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: controller, autofocus: true),
+              TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: "内容")),
               const SizedBox(height: 20),
               Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
                 _buildTypeOption('task', Icons.fiber_manual_record, selectedType, (val) => setState(() => selectedType = val)),
@@ -67,9 +69,10 @@ void showBulletEditDialog(BuildContext context, Bullet bullet) {
                 Expanded(
                   child: _buildStyledOption(
                     icon: Icons.folder_open,
-                    label: collectionName,
+                    label: hasCollections ? collectionName : "无集子可用",
                     isHighLighted: selectedCollectionId != null,
-                    onTap: () {
+                    // 【核心修改】如果没有集子，禁用点击 (onTap 传 null)
+                    onTap: hasCollections ? () {
                       showModalBottomSheet(context: context, builder: (_) => ListView(
                         shrinkWrap: true,
                         children: [
@@ -84,7 +87,7 @@ void showBulletEditDialog(BuildContext context, Bullet bullet) {
                             ListTile(title: const Text("移除集子", style: TextStyle(color: Colors.red)), onTap: () { setState(() => selectedCollectionId = null); Navigator.pop(context); })
                         ],
                       ));
-                    }
+                    } : null,
                   ),
                 ),
               ])
@@ -123,8 +126,39 @@ void showBulletEditDialog(BuildContext context, Bullet bullet) {
   );
 }
 
-Widget _buildStyledOption({required IconData icon, required String label, bool isHighLighted = false, required VoidCallback onTap}) {
-  return GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8), decoration: BoxDecoration(color: isHighLighted ? Colors.blue : Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(icon, size: 16, color: isHighLighted ? Colors.white : Colors.grey), const SizedBox(width: 4), Flexible(child: Text(label, style: TextStyle(fontSize: 12, color: isHighLighted ? Colors.white : Colors.black87), overflow: TextOverflow.ellipsis))])));
+Widget _buildStyledOption({required IconData icon, required String label, bool isHighLighted = false, required VoidCallback? onTap}) {
+  // 如果 onTap 为 null，视为禁用状态
+  bool isDisabled = onTap == null;
+  
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+      decoration: BoxDecoration(
+        color: isDisabled 
+            ? Colors.grey[200] 
+            : (isHighLighted ? Colors.blue : Colors.grey[100]),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16, color: isHighLighted ? Colors.white : Colors.grey),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label, 
+              style: TextStyle(
+                fontSize: 12, 
+                color: isHighLighted ? Colors.white : (isDisabled ? Colors.grey : Colors.black87),
+              ), 
+              overflow: TextOverflow.ellipsis
+            )
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 Widget _buildTypeOption(String type, IconData icon, String current, Function(String) onTap) {

@@ -12,7 +12,8 @@ class Bullet {
   String type;        
   BulletScope scope;   
   String? collectionId; 
-  DateTime updatedAt; // 【新增】修改时间
+  DateTime updatedAt;
+  String? parentId; // 【新增】父任务ID
 
   Bullet({
     required this.id,
@@ -22,8 +23,9 @@ class Bullet {
     this.type = 'task',
     this.scope = BulletScope.day,
     this.collectionId,
-    DateTime? updatedAt, // 可选参数
-  }) : updatedAt = updatedAt ?? DateTime.now(); // 默认为当前时间
+    DateTime? updatedAt,
+    this.parentId, // 【新增】
+  }) : updatedAt = updatedAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() {
     return {
@@ -34,7 +36,8 @@ class Bullet {
       'type': type,
       'scope': scope.name,
       'collectionId': collectionId,
-      'updatedAt': updatedAt.toIso8601String(), // 保存时间
+      'updatedAt': updatedAt.toIso8601String(),
+      'parentId': parentId, // 【新增】
     };
   }
 
@@ -52,18 +55,16 @@ class Bullet {
         orElse: () => BulletScope.day
       ),
       collectionId: map['collectionId'],
-      // 读取时间，如果是旧数据没有这个字段，就给个当前时间
       updatedAt: map['updatedAt'] != null 
           ? DateTime.parse(map['updatedAt']) 
           : DateTime.now(),
+      parentId: map['parentId'], // 【新增】
     );
   }
 
-  // 辅助属性
   bool get isCompleted => status == BulletStatus.completed;
   bool get isCancelled => status == BulletStatus.cancelled;
 
   String toJson() => json.encode(toMap());
-  
   factory Bullet.fromJson(String source) => Bullet.fromMap(json.decode(source));
 }

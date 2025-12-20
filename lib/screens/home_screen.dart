@@ -3,12 +3,12 @@ import 'package:provider/provider.dart';
 import '../models/bullet.dart';
 import '../widgets/add_bullet_sheet.dart';
 import '../providers/bujo_provider.dart';
+import '../widgets/bujo_drawer.dart';
 
 import 'daily_view.dart';
 import 'weekly_view.dart';
 import 'monthly_view.dart';
 import 'yearly_view.dart';
-import '../widgets/bujo_drawer.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -36,12 +36,10 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     return Scaffold(
-      // 父级侧边栏：它的阴影层级最高，会覆盖 Body 和 FAB
       drawer: const BujoDrawer(),
 
       body: pages[_currentIndex],
       
-      // 这里的 FAB 会被 Drawer 的阴影覆盖
       floatingActionButton: FloatingActionButton(
         child: const Icon(Icons.add),
         onPressed: () {

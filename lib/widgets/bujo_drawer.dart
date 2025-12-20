@@ -39,7 +39,6 @@ class BujoDrawer extends StatelessWidget {
           
           ListTile(
             leading: const Icon(Icons.inbox, color: Colors.blue),
-            // 【修改】去掉了英文
             title: const Text("收集箱"),
             onTap: () {
               Navigator.pop(context);
@@ -62,7 +61,6 @@ class BujoDrawer extends StatelessWidget {
           Expanded(
             child: Consumer<BujoProvider>(
               builder: (context, provider, _) {
-                // Provider 中已经做了排序
                 return ListView.builder(
                   padding: EdgeInsets.zero,
                   itemCount: provider.collections.length,

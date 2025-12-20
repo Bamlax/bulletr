@@ -7,8 +7,10 @@ import '../models/bullet.dart';
 import '../models/collection.dart';
 import '../widgets/bujo_drawer.dart';
 import '../widgets/bujo_date_picker.dart';
-import '../widgets/bullet_edit_dialog.dart'; // 【新增】
-import '../widgets/bujo_search_delegate.dart'; // 【新增】
+import '../widgets/bullet_edit_dialog.dart';
+import '../widgets/bujo_search_delegate.dart';
+import '../widgets/draggable_bullet_item.dart';
+import '../widgets/insertion_bar.dart';
 
 class WeeklyView extends StatefulWidget {
   final VoidCallback onJumpToDay;
@@ -80,68 +82,76 @@ class _WeeklyViewState extends State<WeeklyView> {
 
   Widget _buildSingleWeekPage(DateTime weekStart) {
     return SlidableAutoCloseBehavior(
-      child: Column(children: [
-        _buildWeeklyPool(weekStart),
-        Expanded(
-          child: Container(
-            color: Colors.white,
-            // 【新增】下拉搜索
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await showSearch(context: context, delegate: BujoSearchDelegate());
-              },
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                itemCount: 7,
-                itemBuilder: (context, i) {
-                  final dayDate = weekStart.add(Duration(days: i));
-                  return _buildDayDropTarget(dayDate);
+      child: Column(
+        children: [
+          _buildWeeklyPool(weekStart),
+          Expanded(
+            child: Container(
+              color: Colors.white,
+              child: RefreshIndicator(
+                onRefresh: () async {
+                  await showSearch(context: context, delegate: BujoSearchDelegate());
                 },
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: 7,
+                  itemBuilder: (context, i) {
+                    final dayDate = weekStart.add(Duration(days: i));
+                    return _buildDayDropTarget(dayDate);
+                  },
+                ),
               ),
             ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 
   Widget _buildWeeklyPool(DateTime weekStart) {
-    return DragTarget<Bullet>(
-      onAcceptWithDetails: (details) {
-        Provider.of<BujoProvider>(context, listen: false).moveBullet(details.data, weekStart, BulletScope.week);
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty;
-        return Consumer<BujoProvider>(builder: (context, provider, _) {
-          final weeklyBullets = provider.getBulletsByScope(weekStart, BulletScope.week);
-          if (weeklyBullets.isEmpty && !isHovering) return Container(height: 20, width: double.infinity, color: Colors.transparent);
-          return Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(color: isHovering ? Colors.blue.withValues(alpha: 0.1) : const Color(0xFFF5F9FF), border: Border(bottom: BorderSide(color: Colors.grey[200]!))),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (weeklyBullets.isNotEmpty) ...weeklyBullets.map((b) => _buildDraggablePoolStrip(b)),
-              if (isHovering) const Center(child: Text("放回到本周任务", style: TextStyle(color: Colors.blue, fontSize: 12))),
-            ]),
-          );
-        });
-      },
-    );
-  }
+    return Consumer<BujoProvider>(
+      builder: (context, provider, _) {
+        final weeklyBullets = provider.getBulletsByScope(weekStart, BulletScope.week);
+        
+        List<Widget> children = [];
+        
+        // 顶部插入条
+        children.add(InsertionBar(
+          prevBulletId: null,
+          targetDate: weekStart,
+          targetScope: BulletScope.week,
+          targetCollectionId: null,
+        ));
 
-  Widget _buildDraggablePoolStrip(Bullet bullet) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    return LongPressDraggable<Bullet>(
-      data: bullet,
-      feedback: Material(color: Colors.transparent, elevation: 6, child: Container(width: screenWidth * 0.8, padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)), child: _buildStripContent(bullet, isDragging: true))),
-      childWhenDragging: Opacity(opacity: 0.3, child: _buildStripContent(bullet)),
-      child: Slidable(
-        key: ValueKey(bullet.id),
-        groupTag: 'weekly_pool',
-        startActionPane: _buildStartPane(bullet),
-        endActionPane: _buildEndPane(bullet),
-        child: _buildStripContent(bullet),
-      ),
+        // 任务 + 插入条
+        for (var b in weeklyBullets) {
+          children.add(_buildDraggableItem(context, provider, b, isPool: true));
+          children.add(InsertionBar(
+            prevBulletId: b.id,
+            targetDate: weekStart,
+            targetScope: BulletScope.week,
+            targetCollectionId: null,
+          ));
+        }
+
+        // 如果为空，只显示一个极小的高度
+        if (weeklyBullets.isEmpty) {
+           return Container(height: 1, width: double.infinity, color: const Color(0xFFEEEEEE));
+        }
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F9FF),
+            border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children,
+          ),
+        );
+      },
     );
   }
 
@@ -150,63 +160,121 @@ class _WeeklyViewState extends State<WeeklyView> {
     final weekdayChar = _weekdays[date.weekday - 1];
     final dayNum = date.day.toString();
 
-    return DragTarget<Bullet>(
-      onAcceptWithDetails: (details) {
-        Provider.of<BujoProvider>(context, listen: false).moveBullet(details.data, date, BulletScope.day);
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty;
-        return Container(
-          decoration: BoxDecoration(color: isHovering ? Colors.blue.withValues(alpha: 0.1) : (isToday ? const Color(0xFFFFFDE7) : Colors.transparent), border: Border(bottom: BorderSide(color: Colors.grey[200]!, width: 1))),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            InkWell(
-              onTap: () { Provider.of<BujoProvider>(context, listen: false).setFocusDate(date); widget.onJumpToDay(); },
-              child: Container(width: 60, padding: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(border: Border(right: BorderSide(color: Colors.grey[100]!))), child: Column(children: [Text(dayNum, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isToday ? Colors.blue : Colors.black87)), Text(weekdayChar, style: TextStyle(fontSize: 12, color: isToday ? Colors.blue : Colors.grey))])),
+    return Container(
+      decoration: BoxDecoration(
+        color: isToday ? const Color(0xFFFFFDE7) : Colors.transparent,
+        border: Border(bottom: BorderSide(color: Colors.grey[200]!, width: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 左侧日期头
+          InkWell(
+            onTap: () {
+              Provider.of<BujoProvider>(context, listen: false).setFocusDate(date);
+              widget.onJumpToDay();
+            },
+            child: Container(
+              width: 60,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                border: Border(right: BorderSide(color: Colors.grey[100]!)),
+              ),
+              child: Column(children: [
+                Text(dayNum, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isToday ? Colors.blue : Colors.black87)),
+                Text(weekdayChar, style: TextStyle(fontSize: 12, color: isToday ? Colors.blue : Colors.grey)),
+              ]),
             ),
-            Expanded(child: Padding(padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8), child: Consumer<BujoProvider>(builder: (ctx, provider, _) {
-              final dayBullets = provider.getBulletsByScope(date, BulletScope.day);
-              if (dayBullets.isEmpty) return const SizedBox(height: 36);
-              return Column(children: dayBullets.map((b) => _buildDraggableStrip(b)).toList());
-            }))),
-          ]),
-        );
-      },
-    );
-  }
+          ),
+          
+          // 右侧任务列表
+          Expanded(
+            // 移除垂直 padding，紧凑布局
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Consumer<BujoProvider>(
+                builder: (ctx, provider, _) {
+                  final dayBullets = provider.getBulletsByScope(date, BulletScope.day);
+                  
+                  List<Widget> children = [];
+                  
+                  // 1. 顶部插入条 (prevId: null)
+                  children.add(InsertionBar(
+                    prevBulletId: null,
+                    targetDate: date,
+                    targetScope: BulletScope.day,
+                    targetCollectionId: null,
+                  ));
 
-  Widget _buildDraggableStrip(Bullet bullet) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    return LongPressDraggable<Bullet>(
-      data: bullet,
-      feedback: Material(color: Colors.transparent, elevation: 4, child: Container(width: screenWidth - 80, padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)), child: _buildStripContent(bullet, isDragging: true))),
-      childWhenDragging: Opacity(opacity: 0.3, child: _buildStripContent(bullet)),
-      child: Slidable(
-        key: ValueKey(bullet.id),
-        groupTag: 'weekly_list',
-        startActionPane: _buildStartPane(bullet),
-        endActionPane: _buildEndPane(bullet),
-        child: _buildStripContent(bullet),
+                  // 2. 任务 + 插入条
+                  for (var b in dayBullets) {
+                    children.add(_buildDraggableItem(ctx, provider, b));
+                    children.add(InsertionBar(
+                      prevBulletId: b.id,
+                      targetDate: date,
+                      targetScope: BulletScope.day,
+                      targetCollectionId: null,
+                    ));
+                  }
+                  
+                  return Column(children: children);
+                },
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  ActionPane _buildStartPane(Bullet b) {
-    return ActionPane(
-      motion: const ScrollMotion(),
-      children: [
-        SlidableAction(onPressed: (ctx) => Provider.of<BujoProvider>(ctx, listen: false).changeStatus(b.id, BulletStatus.completed), backgroundColor: Colors.green, foregroundColor: Colors.white, icon: Icons.check),
-        SlidableAction(onPressed: (ctx) => Provider.of<BujoProvider>(ctx, listen: false).changeStatus(b.id, BulletStatus.cancelled), backgroundColor: Colors.grey, foregroundColor: Colors.white, icon: Icons.close),
-      ],
-    );
-  }
+  Widget _buildDraggableItem(BuildContext context, BujoProvider provider, Bullet bullet, {bool isPool = false}) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final width = isPool ? screenWidth * 0.8 : screenWidth - 80;
+    
+    int depth = provider.getBulletDepth(bullet);
+    double indent = depth * 16.0;
 
-  ActionPane _buildEndPane(Bullet b) {
-    return ActionPane(
-      motion: const ScrollMotion(),
-      children: [
-        SlidableAction(onPressed: (ctx) => _pickNewDate(ctx, Provider.of<BujoProvider>(ctx, listen: false), b), backgroundColor: Colors.blue, foregroundColor: Colors.white, icon: Icons.calendar_today),
-        SlidableAction(onPressed: (ctx) => Provider.of<BujoProvider>(ctx, listen: false).deleteBullet(b.id), backgroundColor: Colors.red, foregroundColor: Colors.white, icon: Icons.delete),
-      ],
+    Widget slidableItem = Slidable(
+      key: ValueKey(bullet.id),
+      groupTag: isPool ? 'weekly_pool' : 'weekly_list',
+      startActionPane: ActionPane(
+        motion: const ScrollMotion(),
+        children: [
+          SlidableAction(onPressed: (ctx) => provider.changeStatus(bullet.id, BulletStatus.completed), backgroundColor: Colors.green, foregroundColor: Colors.white, icon: Icons.check),
+          SlidableAction(onPressed: (ctx) => provider.changeStatus(bullet.id, BulletStatus.cancelled), backgroundColor: Colors.grey, foregroundColor: Colors.white, icon: Icons.close),
+        ],
+      ),
+      endActionPane: ActionPane(
+        motion: const ScrollMotion(),
+        children: [
+          SlidableAction(onPressed: (ctx) => _pickNewDate(ctx, provider, bullet), backgroundColor: Colors.blue, foregroundColor: Colors.white, icon: Icons.calendar_today),
+          SlidableAction(onPressed: (ctx) => provider.deleteBullet(bullet.id), backgroundColor: Colors.red, foregroundColor: Colors.white, icon: Icons.delete),
+        ],
+      ),
+      child: _buildStripContent(context, provider, bullet, indent: indent),
+    );
+
+    return DraggableBulletItem(
+      bullet: bullet,
+      child: LongPressDraggable<Bullet>(
+        data: bullet,
+        feedback: Material(
+          color: Colors.transparent,
+          child: Container(
+            width: width,
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+            child: Row(
+              children: [
+                Icon(_getIcon(bullet), size: 10, color: Colors.grey),
+                const SizedBox(width: 8),
+                Expanded(child: Text(bullet.content, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, color: Colors.black87, decoration: TextDecoration.none))),
+              ],
+            )
+          )
+        ),
+        childWhenDragging: Opacity(opacity: 0.3, child: slidableItem),
+        child: slidableItem,
+      ),
     );
   }
 
@@ -218,28 +286,46 @@ class _WeeklyViewState extends State<WeeklyView> {
     }
   }
 
-  Widget _buildStripContent(Bullet bullet, {bool isDragging = false}) {
+  Widget _buildStripContent(BuildContext context, BujoProvider provider, Bullet bullet, {bool isDragging = false, double indent = 0}) {
     bool isCancelled = bullet.status == BulletStatus.cancelled;
     bool isCompleted = bullet.status == BulletStatus.completed;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        // 【核心修改】调用公共编辑框
         onTap: isDragging ? null : () => showBulletEditDialog(context, bullet),
         child: Container(
-          margin: const EdgeInsets.only(bottom: 2), padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            GestureDetector(
-              onTap: bullet.type == 'task' ? () => Provider.of<BujoProvider>(context, listen: false).toggleStatus(bullet.id) : null,
-              child: Container(
-                color: Colors.transparent, 
-                padding: const EdgeInsets.only(top: 2, right: 8, bottom: 2),
-                child: Icon(_getIcon(bullet), size: 14, color: (bullet.type == 'task' && !isCompleted && !isCancelled) ? Colors.black : Colors.grey),
+          margin: const EdgeInsets.only(bottom: 2), 
+          padding: EdgeInsets.only(left: 4 + indent, right: 4, top: 4, bottom: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                onTap: bullet.type == 'task' ? () => Provider.of<BujoProvider>(context, listen: false).toggleStatus(bullet.id) : null,
+                child: Container(
+                  padding: const EdgeInsets.only(top: 2, right: 8, bottom: 2),
+                  color: Colors.transparent,
+                  child: Icon(
+                    _getIcon(bullet),
+                    size: 10,
+                    color: (bullet.type == 'task' && !isCompleted && !isCancelled) ? Colors.black : Colors.grey,
+                  ),
+                ),
               ),
-            ),
-            Expanded(child: Text(bullet.content, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, height: 1.2, decoration: isCancelled ? TextDecoration.lineThrough : null, color: (isCompleted || isCancelled) ? Colors.grey : Colors.black87))),
-          ]),
+              Expanded(
+                child: Text(
+                  bullet.content,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    decoration: isCancelled ? TextDecoration.lineThrough : null,
+                    color: (isCompleted || isCancelled) ? Colors.grey : Colors.black87,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
