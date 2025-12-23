@@ -41,18 +41,16 @@ class DraggableBulletItem extends StatelessWidget {
         opacity: 0.3,
         child: child,
       ),
-      // 这里的 DragTarget 只负责嵌套 (变成子任务)
       child: DragTarget<Bullet>(
-        onWillAccept: (data) => data != null && data.id != bullet.id,
-        onAccept: (data) {
-          provider.nestBullet(childId: data.id, parentId: bullet.id);
+        onWillAcceptWithDetails: (details) => details.data.id != bullet.id,
+        onAcceptWithDetails: (details) {
+          provider.nestBullet(childId: details.data.id, parentId: bullet.id);
         },
         builder: (context, candidateData, rejectedData) {
           final isHovering = candidateData.isNotEmpty;
           
           return Container(
             decoration: BoxDecoration(
-              // 悬停时背景变蓝，提示嵌套
               color: isHovering ? Colors.blue.withValues(alpha: 0.1) : Colors.transparent,
               borderRadius: BorderRadius.circular(4),
             ),

@@ -20,14 +20,14 @@ class InsertionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DragTarget<Bullet>(
-      onWillAccept: (data) {
-        if (data == null) return false;
+      onWillAcceptWithDetails: (details) {
+        final data = details.data;
         if (data.id == prevBulletId) return false;
         return true;
       },
-      onAccept: (bullet) {
+      onAcceptWithDetails: (details) {
         Provider.of<BujoProvider>(context, listen: false).insertBulletAfter(
-          activeId: bullet.id,
+          activeId: details.data.id,
           prevId: prevBulletId,
           targetDate: targetDate,
           targetScope: targetScope,
@@ -39,8 +39,8 @@ class InsertionBar extends StatelessWidget {
         
         return Container(
           width: double.infinity,
-          // 【核心修改】平时高度设为 2，极度紧凑；悬停时变大方便看
-          height: isHovering ? 20 : 2, 
+          // 平时高度极小，悬停时变大
+          height: isHovering ? 20 : 4, 
           color: Colors.transparent,
           child: Center(
             child: Container(

@@ -78,7 +78,6 @@ class _DailyViewState extends State<DailyView> {
           onRefresh: () async {
             await showSearch(context: context, delegate: BujoSearchDelegate());
           },
-          // 【核心】使用 BulletListBuilder，内部有透明的 EmptyDropTarget
           child: BulletListBuilder(
             bullets: bullets,
             listTag: 'daily_view_$date', 

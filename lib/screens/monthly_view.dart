@@ -8,7 +8,7 @@ import '../widgets/bujo_date_picker.dart';
 import '../widgets/bullet_edit_dialog.dart';
 import '../widgets/bujo_search_delegate.dart';
 import '../widgets/draggable_bullet_item.dart';
-import '../widgets/insertion_bar.dart'; // 使用插入条
+import '../widgets/insertion_bar.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 
@@ -95,34 +95,28 @@ class _MonthlyViewState extends State<MonthlyView> {
   }
 
   Widget _buildMonthlyPool(DateTime monthDate) {
-    // 顶部池子：使用 InsertionBar 穿插
-    return Consumer<BujoProvider>(builder: (context, provider, _) {
-      final monthlyBullets = provider.getBulletsByScope(monthDate, BulletScope.month);
-      
-      List<Widget> children = [];
-      children.add(InsertionBar(prevBulletId: null, targetDate: monthDate, targetScope: BulletScope.month, targetCollectionId: null));
-      for (var b in monthlyBullets) {
-        children.add(_buildDraggableItem(context, provider, b, isPool: true));
-        children.add(InsertionBar(prevBulletId: b.id, targetDate: monthDate, targetScope: BulletScope.month, targetCollectionId: null));
-      }
+    return DragTarget<Bullet>(
+      onAcceptWithDetails: (details) { Provider.of<BujoProvider>(context, listen: false).moveBullet(details.data, monthDate, BulletScope.month); },
+      builder: (context, candidateData, rejectedData) {
+        final isHovering = candidateData.isNotEmpty;
+        return Consumer<BujoProvider>(builder: (context, provider, _) {
+          final monthlyBullets = provider.getBulletsByScope(monthDate, BulletScope.month);
+          
+          if (monthlyBullets.isEmpty && !isHovering) {
+             return Container(height: 1, width: double.infinity, color: const Color(0xFFEEEEEE));
+          }
 
-      if (monthlyBullets.isEmpty) {
-         // 最小高度用于接收
-         return Container(
-           height: 20, 
-           width: double.infinity, 
-           color: const Color(0xFFF5F9FF),
-           child: children.first, // 只放一个顶部的 InsertionBar 即可接收拖拽
-         );
-      }
-
-      return Container(
-        width: double.infinity, 
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(color: const Color(0xFFF5F9FF), border: Border(bottom: BorderSide(color: Colors.grey[200]!))),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
-      );
-    });
+          return Container(
+            width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(color: isHovering ? Colors.blue.withValues(alpha: 0.1) : const Color(0xFFF5F9FF), border: Border(bottom: BorderSide(color: Colors.grey[200]!))),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (monthlyBullets.isNotEmpty) ...monthlyBullets.map((b) => _buildDraggableItem(context, provider, b, isPool: true)),
+              InsertionBar(prevBulletId: monthlyBullets.isNotEmpty ? monthlyBullets.last.id : null, targetDate: monthDate, targetScope: BulletScope.month, targetCollectionId: null),
+            ]),
+          );
+        });
+      },
+    );
   }
 
   Widget _buildDayRow(DateTime date) {
@@ -130,41 +124,48 @@ class _MonthlyViewState extends State<MonthlyView> {
     final isToday = date.year == now.year && date.month == now.month && date.day == now.day;
     final weekdayChar = _weekdays[date.weekday - 1]; 
 
-    return Container(
-      decoration: BoxDecoration(color: isToday ? const Color(0xFFFFFDE7) : Colors.transparent, border: Border(bottom: BorderSide(color: Colors.grey[100]!, width: 0.5))),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        InkWell(
-          onTap: () { Provider.of<BujoProvider>(context, listen: false).setFocusDate(date); widget.onJumpToDay(); },
-          child: Container(width: 50, padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4), alignment: Alignment.topCenter, decoration: BoxDecoration(border: Border(right: BorderSide(color: Colors.grey[50]!))), child: Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [Text("${date.day}", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isToday ? Colors.blue : Colors.black87)), const SizedBox(width: 2), Text(weekdayChar, style: TextStyle(fontSize: 10, color: isToday ? Colors.blue : Colors.grey))])),
-        ),
-        Expanded(child: Padding(padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8), child: Consumer<BujoProvider>(builder: (ctx, provider, _) {
-          final dayBullets = provider.getBulletsByScope(date, BulletScope.day);
-          
-          // 【核心修改】使用 InsertionBar 穿插逻辑，解决底部太宽问题
-          List<Widget> children = [];
-          children.add(InsertionBar(prevBulletId: null, targetDate: date, targetScope: BulletScope.day, targetCollectionId: null));
-          for (var b in dayBullets) {
-            children.add(_buildDraggableItem(ctx, provider, b));
-            children.add(InsertionBar(prevBulletId: b.id, targetDate: date, targetScope: BulletScope.day, targetCollectionId: null));
-          }
+    return DragTarget<Bullet>(
+      onAcceptWithDetails: (details) { Provider.of<BujoProvider>(context, listen: false).moveBullet(details.data, date, BulletScope.day); },
+      builder: (context, candidateData, rejectedData) {
+        final isHovering = candidateData.isNotEmpty;
+        return Container(
+          decoration: BoxDecoration(color: isHovering ? Colors.blue.withValues(alpha: 0.1) : (isToday ? const Color(0xFFFFFDE7) : Colors.transparent), border: Border(bottom: BorderSide(color: Colors.grey[100]!, width: 0.5))),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            InkWell(
+              onTap: () { Provider.of<BujoProvider>(context, listen: false).setFocusDate(date); widget.onJumpToDay(); },
+              child: Container(width: 50, padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4), alignment: Alignment.topCenter, decoration: BoxDecoration(border: Border(right: BorderSide(color: Colors.grey[50]!))), child: Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [Text("${date.day}", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isToday ? Colors.blue : Colors.black87)), const SizedBox(width: 2), Text(weekdayChar, style: TextStyle(fontSize: 10, color: isToday ? Colors.blue : Colors.grey))])),
+            ),
+            Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Consumer<BujoProvider>(builder: (ctx, provider, _) {
+              final dayBullets = provider.getBulletsByScope(date, BulletScope.day);
+              
+              List<Widget> children = [];
+              children.add(InsertionBar(prevBulletId: null, targetDate: date, targetScope: BulletScope.day, targetCollectionId: null));
+              for (var b in dayBullets) {
+                children.add(_buildDraggableItem(ctx, provider, b));
+                children.add(InsertionBar(prevBulletId: b.id, targetDate: date, targetScope: BulletScope.day, targetCollectionId: null));
+              }
 
-          return Column(children: children);
-        }))),
-      ]),
+              return Column(children: children);
+            }))),
+          ]),
+        );
+      },
     );
   }
 
+  // 复用 DraggableBulletItem (保持一致)
   Widget _buildDraggableItem(BuildContext context, BujoProvider provider, Bullet bullet, {bool isPool = false}) {
     final screenWidth = MediaQuery.of(context).size.width;
     final width = isPool ? screenWidth * 0.8 : screenWidth - 70;
     int depth = provider.getBulletDepth(bullet);
     double indent = depth * 16.0;
 
-    Widget slidableItem = Slidable(key: ValueKey(bullet.id), groupTag: isPool ? 'monthly_pool' : 'monthly_list', startActionPane: _buildStartPane(context, provider, bullet), endActionPane: _buildEndPane(context, provider, bullet), child: _buildStripContent(context, provider, bullet, indent: indent));
+    Widget slidableItem = Slidable(key: ValueKey(bullet.id), groupTag: isPool ? 'monthly_pool' : 'monthly_list', startActionPane: (bullet.type == 'task') ? _buildStartPane(context, provider, bullet) : null, endActionPane: _buildEndPane(context, provider, bullet), child: _buildStripContent(context, provider, bullet, indent: indent));
 
     return DraggableBulletItem(bullet: bullet, child: slidableItem);
   }
 
+  // ... (辅助方法同上)
   ActionPane _buildStartPane(BuildContext context, BujoProvider provider, Bullet b) { return ActionPane(motion: const ScrollMotion(), children: [SlidableAction(onPressed: (ctx) => Provider.of<BujoProvider>(ctx, listen: false).changeStatus(b.id, BulletStatus.completed), backgroundColor: Colors.green, foregroundColor: Colors.white, icon: Icons.check), SlidableAction(onPressed: (ctx) => Provider.of<BujoProvider>(ctx, listen: false).changeStatus(b.id, BulletStatus.cancelled), backgroundColor: Colors.grey, foregroundColor: Colors.white, icon: Icons.close)]); }
   ActionPane _buildEndPane(BuildContext context, BujoProvider provider, Bullet b) { return ActionPane(motion: const ScrollMotion(), children: [SlidableAction(onPressed: (ctx) => _pickNewDate(ctx, Provider.of<BujoProvider>(ctx, listen: false), b), backgroundColor: Colors.blue, foregroundColor: Colors.white, icon: Icons.calendar_today), SlidableAction(onPressed: (ctx) => Provider.of<BujoProvider>(ctx, listen: false).deleteBullet(b.id), backgroundColor: Colors.red, foregroundColor: Colors.white, icon: Icons.delete)]); }
   Future<void> _pickNewDate(BuildContext context, BujoProvider provider, Bullet b) async { final result = await showBujoDatePicker(context, initialDate: b.date ?? DateTime.now(), initialScope: b.scope); if (result != null) { if (result.date == null) provider.updateBulletFull(b.id, content: b.content, type: b.type, date: null, scope: BulletScope.none, collectionId: null); else provider.moveBullet(b, result.date!, result.scope); } }

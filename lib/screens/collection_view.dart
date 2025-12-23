@@ -46,6 +46,7 @@ class CollectionView extends StatelessWidget {
               bullets: bullets,
               listTag: 'collection_view_$collectionId',
               collectionId: collectionId,
+              // 如果是收集箱，scope 设为 none
               scope: collectionId == null ? BulletScope.none : BulletScope.day,
             ),
           );

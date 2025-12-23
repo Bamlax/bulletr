@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:intl/intl.dart';
 import '../models/bullet.dart';
 import '../providers/bujo_provider.dart';
 import 'bullet_edit_dialog.dart';
 import 'bujo_date_picker.dart';
 import 'draggable_bullet_item.dart';
-import 'insertion_bar.dart'; // 只需要这个
+import 'insertion_bar.dart';
 
 class BulletListBuilder extends StatelessWidget {
   final List<Bullet> bullets;
@@ -33,7 +34,6 @@ class BulletListBuilder extends StatelessWidget {
           SliverList(
             delegate: SliverChildBuilderDelegate(
               (context, index) {
-                // 列表逻辑：2n 是插入条，2n+1 是任务
                 if (index.isEven) {
                   final bulletIndex = index ~/ 2;
                   String? prevId;
@@ -52,21 +52,20 @@ class BulletListBuilder extends StatelessWidget {
                   return _buildListItem(context, b, index);
                 }
               },
-              // 数量 = 任务数 * 2 + 1 (最后一条后面也有 InsertionBar)
               childCount: bullets.length * 2 + 1,
             ),
           ),
           
-          // 填充剩余空白区域，允许拖拽到这里自动追加到末尾
+          // 填充剩余空白区域 (手动实现 EmptyDropTarget 的逻辑)
           SliverFillRemaining(
             hasScrollBody: false,
             child: DragTarget<Bullet>(
-              onWillAccept: (data) => data != null,
-              onAccept: (bullet) {
-                // 插到最后一个任务后面
+              onWillAcceptWithDetails: (details) => true,
+              onAcceptWithDetails: (details) {
+                // 插到列表最后
                 String? lastId = bullets.isNotEmpty ? bullets.last.id : null;
                 Provider.of<BujoProvider>(context, listen: false).insertBulletAfter(
-                  activeId: bullet.id,
+                  activeId: details.data.id,
                   prevId: lastId,
                   targetDate: date,
                   targetScope: scope,
@@ -91,18 +90,38 @@ class BulletListBuilder extends StatelessWidget {
     Widget slidableItem = Slidable(
       key: ValueKey(b.id),
       groupTag: listTag,
-      startActionPane: ActionPane(
+      startActionPane: (b.type == 'task') ? ActionPane(
         motion: const ScrollMotion(),
         children: [
-          SlidableAction(onPressed: (ctx) => provider.changeStatus(b.id, BulletStatus.completed), backgroundColor: Colors.green, foregroundColor: Colors.white, icon: Icons.check),
-          SlidableAction(onPressed: (ctx) => provider.changeStatus(b.id, BulletStatus.cancelled), backgroundColor: Colors.grey, foregroundColor: Colors.white, icon: Icons.close),
+          SlidableAction(
+            onPressed: (ctx) => provider.changeStatus(b.id, BulletStatus.completed),
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+            icon: Icons.check,
+          ),
+          SlidableAction(
+            onPressed: (ctx) => provider.changeStatus(b.id, BulletStatus.cancelled),
+            backgroundColor: Colors.grey,
+            foregroundColor: Colors.white,
+            icon: Icons.close,
+          ),
         ],
-      ),
+      ) : null,
       endActionPane: ActionPane(
         motion: const ScrollMotion(),
         children: [
-          SlidableAction(onPressed: (ctx) => _pickNewDate(ctx, provider, b), backgroundColor: Colors.blue, foregroundColor: Colors.white, icon: Icons.calendar_today),
-          SlidableAction(onPressed: (ctx) => provider.deleteBullet(b.id), backgroundColor: Colors.red, foregroundColor: Colors.white, icon: Icons.delete),
+          SlidableAction(
+            onPressed: (ctx) => _pickNewDate(ctx, provider, b),
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            icon: Icons.calendar_today,
+          ),
+          SlidableAction(
+            onPressed: (ctx) => provider.deleteBullet(b.id),
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+            icon: Icons.delete,
+          ),
         ],
       ),
       child: Material(
@@ -115,56 +134,33 @@ class BulletListBuilder extends StatelessWidget {
             padding: EdgeInsets.only(left: 16 + indent, right: 16, top: 0, bottom: 0),
             child: Row(
               children: [
-                ReorderableDragStartListener(
-                  index: index, // 注意：这里的 index 仅仅为了 Widget 结构，实际排序逻辑已由 InsertionBar 接管
-                  enabled: false, // 禁用自带的排序监听，防止冲突
-                  child: GestureDetector(
-                    onTap: b.type == 'task' ? () => provider.toggleStatus(b.id) : null,
-                    child: Container(
-                      color: Colors.transparent,
-                      padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
-                      child: Icon(
-                        _getIcon(b),
-                        size: 14,
-                        color: (b.type == 'task' && !b.isCompleted && !b.isCancelled) 
-                            ? Colors.black 
-                            : Colors.grey,
-                      ),
+                GestureDetector(
+                  onTap: b.type == 'task' ? () => provider.toggleStatus(b.id) : null,
+                  child: Container(
+                    color: Colors.transparent,
+                    padding: const EdgeInsets.fromLTRB(0, 12, 12, 12),
+                    child: Icon(
+                      _getIcon(b),
+                      size: 14,
+                      color: (b.type == 'task' && !b.isCompleted && !b.isCancelled) 
+                          ? Colors.black 
+                          : Colors.grey,
                     ),
                   ),
                 ),
                 Expanded(
-                  child: LongPressDraggable<Bullet>(
-                    data: b,
-                    feedback: Material(
-                      color: Colors.transparent,
-                      child: Container(
-                        // 宽度设为屏幕宽的一定比例
-                        width: MediaQuery.of(context).size.width * 0.7,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Text(
-                          b.content,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: Colors.black87,
-                            height: 1.2,
-                            decoration: TextDecoration.none,
-                          ),
-                        ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      b.content,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        decoration: b.status == BulletStatus.cancelled ? TextDecoration.lineThrough : null,
+                        color: (b.status != BulletStatus.open) ? Colors.grey : Colors.black87,
+                        fontSize: 15,
+                        height: 1.2,
                       ),
-                    ),
-                    childWhenDragging: Opacity(
-                      opacity: 0.3,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: _buildText(b),
-                      ),
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: _buildText(b),
                     ),
                   ),
                 ),
@@ -178,20 +174,6 @@ class BulletListBuilder extends StatelessWidget {
     return DraggableBulletItem(
       bullet: b,
       child: slidableItem,
-    );
-  }
-
-  Widget _buildText(Bullet b) {
-    return Text(
-      b.content,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        decoration: b.status == BulletStatus.cancelled ? TextDecoration.lineThrough : null,
-        color: (b.status != BulletStatus.open) ? Colors.grey : Colors.black87,
-        fontSize: 15,
-        height: 1.2,
-      ),
     );
   }
 
